@@ -8,11 +8,13 @@ on:
       - 'opendbc_repo/opendbc/safety/xpilot_rules.h'
       - 'opendbc_repo/opendbc/safety/tests/test_xpilot_sensor_motion.py'
       - '.github/workflows/radar-safety.yaml'
+      - 'panda/SConstruct'
   pull_request:
     paths:
       - 'opendbc_repo/opendbc/safety/xpilot_rules.h'
       - 'opendbc_repo/opendbc/safety/tests/test_xpilot_sensor_motion.py'
       - '.github/workflows/radar-safety.yaml'
+      - 'panda/SConstruct'
 
 permissions:
   contents: read
@@ -48,15 +50,16 @@ jobs:
         set -o pipefail
         scons -j4 2>&1 | tee /tmp/radar-safety/build.txt
         arm-none-eabi-size board/obj/*/*.elf | tee /tmp/radar-safety/sizes.txt
-        sha256sum board/obj/*/*.elf board/obj/*/*.bin > /tmp/radar-safety/firmware-sha256.txt
+        sha256sum board/obj/*/*.elf board/obj/*/*.bin board/obj/*.bin.signed > /tmp/radar-safety/firmware-sha256.txt
     - name: Baseline size comparison
       run: |
         mkdir -p /tmp/radar-firmware-baseline
         git archive 5d0baa5c9785046a4a4650bd33f7396179ba97be panda opendbc_repo | tar -x -C /tmp/radar-firmware-baseline
+        cp panda/SConstruct /tmp/radar-firmware-baseline/panda/SConstruct
         cd /tmp/radar-firmware-baseline/panda
         PYTHONPATH=/tmp/radar-firmware-baseline:/tmp/radar-firmware-baseline/opendbc_repo scons -j4 > /tmp/radar-safety/baseline-build.txt 2>&1
         arm-none-eabi-size board/obj/*/*.elf > /tmp/radar-safety/baseline-sizes.txt
-        echo 'Source baseline: 5d0baa5c9785046a4a4650bd33f7396179ba97be; archive has no git metadata, embedded version uses unknown.' >> /tmp/radar-safety/baseline-sizes.txt
+        echo 'Source baseline: 5d0baa5c9785046a4a4650bd33f7396179ba97be; same standalone SConstruct option fix; archive has no git metadata, embedded version uses unknown.' >> /tmp/radar-safety/baseline-sizes.txt
     - name: MISRA
       working-directory: panda
       run: |
@@ -70,6 +73,7 @@ jobs:
           /tmp/radar-safety
           panda/board/obj/**/*.elf
           panda/board/obj/**/*.bin
+          panda/board/obj/*.bin.signed
           panda/tests/misra/checkers.txt
           panda/tests/misra/coverage_table
         retention-days: 30
