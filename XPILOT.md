@@ -102,10 +102,14 @@ panda/board/xpilot_rules.h   app EP2 loader
 | `priority` | 数字越小越优先：争同一个独占资源时它赢；同类插件的执行顺序也按它，数字相同按 id |
 | `enable_param` | BOOL 总开关；`null` 表示一直开启。关闭时 card 不创建插件、进程不启动、plan filter/目标车速不加载、UI 不显示。车端下一次行程生效，UI 1 秒内生效 |
 | `claims` | 要用的资源，见下表；没声明的一律被拒绝 |
-| `settings` | 设置项：只有 key 和 label 是开关；带 `range: [最小, 最大, 步长, 单位, 除数]` 或 `choices: [[标签, 值], ...]` 是选择项 |
+| `settings` | 设置项：只有 key 和 label 是开关；带 `range: [最小, 最大, 步长, 单位, 除数]` 或 `choices: [[标签, 值], ...]` 是选择项；`type: "text"` / `"secret"` 是文本 / 秘密输入，见下文 |
 | `params` | 参数声明，格式见 `gen_params.py`；改完运行 `python3 openpilot/tesla/plugins/gen_params.py` |
 | `rules` | `template_clone.v1` 规则列表，字段与限制见第 6 节合同；can.tx 必须精确匹配。旧 `safety` 字段一律拒绝 |
 | `requires` | 可选能力需求：`{"hooks": ["setup"], "msg": ["lanes.hint"], "rule_abi": 1, "native": {"machine": "aarch64", "python": "cpython-312"}}`；每项可省略 |
+
+文本设置写成 `{"key": "MyServer", "label": "Server", "type": "text", "max_len": 64}`；秘密设置用 `"type": "secret"`，对应 `params` 必须声明 `"type": "STRING"`。`max_len` 默认 64，只接受 1–256 的整数；不能同时带 range/choices，未知 type 和不合法的 max_len 会拒载。未声明 type 的开关、range、choices 保持原语义。
+
+两套设置页复用 Wi-Fi 键盘，只允许停车编辑，提交时再次检查停车状态。text 预填当前值；secret 每次打开为空，行内有值固定显示 `******`、无值显示 `Not set`，不显示原值或原值长度。输入只接受可打印 ASCII（0x20–0x7e，允许空格和空字符串），超过 max_len 或非法字符会保留原输入并显示短错误；取消不写入，确认空字符串可清空。秘密键盘始终遮罩且不短暂回显最后一个字符。插件沿用 `ParamsView.get/put`，商店参数仍存 `.params` 文件、不新增编译 key；secret 是显示保护，不增加存储加密。设置路径不记录值到日志或故障文本。G2 配对码控件另做。
 
 清单有错（id 不对、类别未知、use 缺失或无效、api 不匹配、资源格式错、JSON 坏了）或代码导入失败的插件会被跳过，在 Plugins 页顶部显示 "Failed: <id>"，不影响其他插件。
 
@@ -169,11 +173,13 @@ card 每次启动用 `cloudlog.event("xpilot.drive_snapshot", ...)` 记录本行
 | `role:<环节>` | 占用一个可替换的环节，如 `role:lateral.controller` | 是 |
 | `long.target` | 使用 `long_target` 钩子 | 否，宿主按固定规则合并 |
 | `plan.filter` | 使用 `plan_filter` 钩子 | 否，按优先级串联 |
+| `event.filter` | 使用 `event_filter` 钩子，只删宿主 allowlist 中的事件 | 否，按 `(priority, id)` 串联 |
 | `alert` | 使用 `alert_source` 钩子 | 否，每个级别取优先级最高插件的第一条 |
 | `lat.correction` | 使用 `lat_correction` 钩子 | 否，按优先级串联，总改动有上限 |
 | `external.provider` | 使用 `external_provider` 钩子 | 否，所有 provider 一起运行 |
 | `role:lane_change.policy` | 使用 `lane_change_policy` 钩子 | 是 |
 | `role:lateral.controller` | 替换横向控制器（`lat_controller`） | 是 |
+| `role:long.owner` | 用 `long_owner` 提议 STOCK/SP owner；必须 `requires.hooks=["long_owner"]`，不授予 CAN 或安全权限 | 是 |
 | `role:long.planner` | 替换纵向规划（`long_planner`），可以自带跟车逻辑 | 是 |
 | `role:perception.model` | 整体替换模型（下载、选择、缓存、推理）。宿主 `ROLE_PROCESSES` 保留 `models_manager`、`modeld`、`modeld_tinygrad`、`modeld_warmup` 四个名字，`fork_processes.py` 把原进程对象交给宿主；只有声明该 role 的插件会收到 `role_processes(role, procs)`，可返回全部、部分或不返回，且必须是传入字典里的原对象（按身份校验）。返回的进程只在该插件持有 role 且原 `should_run` 条件成立时运行；无人持有时四个都不运行。默认 `sp_models`（优先级 10000、一直开启）返回全部；替换插件也可保持空选择、用 `processes()` 自带进程，不能借此占用这四个保留名。hook 抛异常或返回外来对象时记录故障、拒绝本次选择，其他插件继续注册。必须按原语义发布 `modelV2`、`drivingModelData`、`cameraOdometry`、`modelDataV2SP`。替换插件优先级要小于 10000；切换只在停车时改开关、下次启动进程时生效 | 是 |
 | `role:engagement.state` | 用 `engagement(selfdrive)` 整体替换接管：普通状态机和 MADS。默认 `sp_engagement`（优先级 10000、一直开启） | 是 |
@@ -218,15 +224,19 @@ Host E2E：`PYTHONPATH=tinygrad_repo python3 tools/sp_tesla_e2e/model_source_e2e
 | `lane_change_policy(params)`（类方法） | modeld 的 DesireHelper | 返回带 `allow(carstate, direction, default) -> bool` 的对象，只替换 SP 的"不用推方向盘就开始变道"这一个判断（`default` 是 SP 原来的结果）。打转向灯、最低车速、盲区和路沿检查仍然强制生效 |
 | `lat_correction(CP, params)`（类方法） | controlsd，横向生效时每个控制周期 | 返回带 `update(sm, v_ego, curvature) -> 曲率或 None` 的对象。多个修正按优先级串联；总改动不超过 0.5 m/s² 横向加速度对应的曲率（低于 5 m/s 按 5 m/s 算），NaN/inf 被忽略；之后 SP 的 `clip_curvature`（ISO 加加速度和加速度限制）照常生效 |
 | `lat_controller(CP, CP_SP, CI, params)`（类方法） | controlsd | 返回和 `LatControl` 接口一致的对象（`update(...) -> (steer, 转角, lac_log)`、`reset()`），替换 SP 的横向控制器。输出不和 SP 比较、不额外限制，只靠车端转角速率限制和 panda 兜底。SP 的控制器一直并行运行；插件出错或输出 NaN/inf 时，本次运行剩下的时间都改用 SP 的输出 |
+| `long_owner(CP, CP_SP, params)`（类方法） | controlsd | 可选独占 `role:long.owner`，返回带 `desired(ctx, CS) -> None / "stock" / "sp"` 的对象。只提议 owner，所有 host veto 和 Panda health 确认仍生效；构造/调用异常、非法返回值记录故障并停用本行程，不自动提升落败插件；None 保持 owner。collector/context/手动脉冲合同见 [host design](docs/design/xpilot-long-owner-host.md) |
 | `long_planner(CP, CP_SP, params)`（类方法） | plannerd，SP 算完之后 | 返回带 `update(sm, sp) -> plan 或 None` 的对象。`sp` 是 SP 的结果（`speeds`、`accels`、`jerks` 各 17 个点，`a_target`、`should_stop`）；返回同样字段的 plan 就替换 SP 的计划，**包括跟车**。`a_target` 限制在 ACCEL_MIN/MAX；长度不对、NaN/inf 或 None 时保留 SP 的计划；出错的规划器被停用。SP 的 MPC 仍然运行，FCW 仍由它决定 |
 | `plan_filter(CP, params)`（类方法） | plannerd | 返回带 `publisher(pm, sm)` 的对象，用来收紧纵向计划；不需要就返回 None |
 | `engagement(selfdrive)`（类方法） | selfdrived，启动时一次 | 返回带 `state_machine`（SP `StateMachine` 接口）和 `mads`（MADS 接口，None 表示关闭 MADS 横向接管）的对象。插件可以保存、读取 `selfdrive`，只通过这两个输出改变接管，由宿主限幅；默认插件返回 `SelfdriveD.__init__` 已建好的 SP 实例，也走相同宿主路径。宿主底线（`openpilot/tesla/core_host.py`，用户 2026-10-23 决定）：底线里的 USER/IMMEDIATE 退出事件一定生效；接管必须有 SP 产生的驾驶员 ENABLE 事件（MADS：LKAS 按钮或屏幕手势，或普通 ENABLE）且没有底线 NO_ENTRY；`active` 必须和 `enabled`、状态一致；软退出最多 SOFT_DISABLE_TIME + 1 秒；`ET.PERMANENT` 一直显示（FCW、原车 AEB）；MADS 开启时按 LKAS 按钮一定退出；遵守 `Mads` 开关 |
-| `safety_fallback(ctx)`（类方法） | selfdrived，启动时一次；返回对象每周期在 SP 的 `update_events` 之后执行 | 返回带 `update(ctx, CS, names, names_sp) -> (names, names_sp)` 的对象。`ctx = SimpleNamespace(sm, CP, CP_SP, params=view(params))` 由宿主只建一次，不暴露 `selfdrive` 或事件对象。返回两份已知事件名列表（保留或增加的事件）；宿主在原 `events` / `events_sp` 对象中重建，保持报警计数，再把底线事件放回。默认插件原样返回 SP 列表。底线：踩油门/刹车/取消（pedalPressed、buttonCancel、pcmDisable）、fcw、stockAeb、stockFcw、controlsMismatch(+Lateral)、relayMalfunction、canError、canBusMissing、selfdrivedLagging、commIssue(AvgFreq)、processNotRunning、selfdriveInitializing、DM 事件、lkasDisable。DM 锁定仍由 SP 处理 |
+| `event_filter(ctx, CS, names, names_sp)`（可选类方法） | selfdrived，每周期 SP 事件生成之后、独占 fallback 之前 | 声明 `event.filter`，返回 `(drop, drop_sp)` 两个列表；只接收事件名副本，不改 CarState。宿主 allowlist 首项且唯一项是普通事件 `invalidLkasSetting`，`drop_sp` 必须为空。越权、非列表或异常均记录该插件故障，后续不再调用并显示 `xpilotPluginFault`；过滤器故障不锁定两轴，保留事件使策略更严格 |
+| `safety_fallback(ctx)`（类方法） | selfdrived，启动时一次；返回对象每周期在 SP 事件和共享过滤器之后执行 | 返回带 `update(ctx, CS, names, names_sp) -> (names, names_sp)` 的对象。`ctx = SimpleNamespace(sm, CP, CP_SP, params=view(params))` 由宿主只建一次，不暴露 `selfdrive` 或事件对象。返回两份已知事件名列表（保留或增加的事件）；宿主在原 `events` / `events_sp` 对象中重建，保持报警计数，再把底线事件放回。默认插件原样返回 SP 列表。底线：踩油门/刹车/取消（pedalPressed、buttonCancel、pcmDisable）、fcw、stockAeb、stockFcw、controlsMismatch(+Lateral)、relayMalfunction、canError、canBusMissing、selfdrivedLagging、commIssue(AvgFreq)、processNotRunning、selfdriveInitializing、DM 事件、lkasDisable。DM 锁定仍由 SP 处理 |
 | `radar_interface(CP, CP_SP, params)`（类方法） | card，启动时 | 需要 `source:radar`。返回和 `RadarInterfaceBase` 接口一致的对象（`update(can_list) -> RadarData 或 None`），替换车型自带的雷达。原车雷达一直并行运行；插件出错后本次运行剩下的时间回到原车雷达 |
 | `external_provider(params)`（类方法） | externald，启动时 | 需要 `external.provider`。返回一个 provider（`poll`、`send`、`close`），见 8b |
 | `SERVICES` | plannerd、selfdrived、controlsd | 钩子需要额外订阅的服务；这些服务不参与存活和有效性检查，不会影响接管 |
 
 SP 里的调用位置：`selfdrive/car/card.py`（`CarPlugins`、`radar_interface`）、`selfdrive/controls/plannerd.py`（`services`、`plan_filters`、`plan_sink`、`long_targets`）、`sunnypilot/selfdrive/controls/lib/longitudinal_planner.py`（`apply_long_targets`）、`selfdrive/selfdrived/selfdrived.py`（`alert_sources`、`update_alerts`）、`sunnypilot/selfdrive/selfdrived/events.py`（插件报警定义，见 `openpilot/tesla/alerts.py`）、`selfdrive/controls/lib/desire_helper.py`（`lane_change_policies`、`lane_change_allowed`）、`selfdrive/controls/controlsd.py`（`lat_corrections`、`apply_lat_corrections`、`lateral_controller`）、`selfdrive/controls/lib/longitudinal_planner.py`（`apply_long_planner`）、`sunnypilot/system/fork_processes.py`（`processes`，以及 `holds(params, "source:map")` 关掉 SP 的地图进程）、`selfdrive/selfdrived/selfdrived.py`（`install_core`）、`selfdrive/car/card.py`（`core_alive`：Tesla 安装宿主后始终门控，包括默认插件；启动尚无 `selfdriveState` 时不发控制，发布后恢复；断流约 0.1 秒内停止）。
+
+**事件过滤底线**：顺序固定为 SP events → 所有启用的 filter（priority 小优先，同值按 id）→ 独占 `safety.fallback` → 恢复 floor。filter 只能删除显式 allowlist 事件；FLOOR/FLOOR_SP、驾驶员 ENABLE、doorOpen、seatbeltNotLatched、steerUnavailable、wrongGear 和其他未列入 allowlist 的 NO_ENTRY/退出事件均不可删。两份返回列表先整体校验，非法输出不作任何删除；输入副本的修改不会影响 SP。已记录的 filter 故障在 selfdrived 重启后继续停用并显示，直到停车重启 manager 清除。`ctx` 与 fallback 相同。宿主启动时仅选取总开关已开启且 claims 裁决胜出的插件，名单按行程冻结；mixed filter 无需每帧重读总开关，开关变化在停车重启驾驶进程后生效。
 
 **接管/兜底出错**：每个角色都只取当前 owner，没有 owner、钩子抛异常或返回 None、更新输出不合法（兜底非列表或未知事件名），本次行驶两轴都锁定为退出并显示 `xpilotPluginFault`（selfdrived 重启也保持，靠 `XpilotPluginFaults`），停车重启 manager 后才清除；行驶中不切回其他实现。兜底输出先整体校验，出错保持 SP 原事件和底线。宿主只认识角色，不认识默认插件 id。卡死由 card 的 `core_alive` 和 panda 心跳兜底。进程内插件是受信任的已审核代码，claims 不是沙箱，最终底线是 panda safety。
 
@@ -283,7 +293,7 @@ class MyTile(Tile):
 
 **清单和元数据**（`openpilot/tesla/manifest.py`）：`plugin.json` 字段见 4.1；`CATEGORIES`（类别和显示名）；`API_VERSION`（现在 1）；claims 格式见 4.3。宿主从清单填好 `Plugin` 的类属性：`NAME`、`TITLE`、`DESCRIPTION`、`CATEGORY`、`PRIORITY`、`ENABLE_PARAM`、`CLAIMS`、`SETTINGS`、`MANIFEST`（含 `version`、`author`），插件只读。插件自己可以设 `SERVICES`（钩子要额外订阅的服务）。
 
-**Python 钩子**（`openpilot/tesla/plugin.py` 的 `Plugin`，全部有空的默认实现，详细规则见 4.4）：
+**Python 钩子**（`openpilot/tesla/plugin.py` 的 `Plugin`；可选 `event_filter` 由声明 claim 的类直接实现，其余有空的默认实现，详细规则见 4.4）：
 
 | 进程 | 钩子 | 需要的 claim |
 |---|---|---|
@@ -297,8 +307,10 @@ class MyTile(Tile):
 | plannerd | `long_planner(CP, CP_SP, params)` | `role:long.planner` |
 | controlsd | `lat_correction(CP, params)` | `lat.correction` |
 | controlsd | `lat_controller(CP, CP_SP, CI, params)` | `role:lateral.controller` |
+| controlsd | `long_owner(CP, CP_SP, params)` | `role:long.owner`（可选） |
 | modeld | `lane_change_policy(params)` | `role:lane_change.policy` |
 | selfdrived | `alert_source(CP, params)`，返回 `PluginAlert(severity, title, body)` | `alert` |
+| selfdrived | `event_filter(ctx, CS, names, names_sp) -> (drop, drop_sp)` | `event.filter` |
 | externald | `external_provider(params)`，返回 `Provider`（`poll`、`send`、`close`） | `external.provider` |
 
 `can_list` 每一项是 `(mono_time_ns, [(address, data, bus), ...])`；总线编号用 `opendbc.car.tesla.values.CANBUS`（`party`、`vehicle`、`autopilot_party`）。解析可以用位运算，也可以用 `opendbc.can.CANParser` 读 `opendbc/dbc/` 里的 DBC。
@@ -363,7 +375,64 @@ app 固件专用 CAPS/STATUS/BEGIN/COMMIT/CLEAR 及 EP2 64 字节记录见合同
 
 检查：`test_xpilot_rules.py`（失败矩阵 R1–R17、真实 C 引擎和 app loader、旧头文件差分）、`test_xpilot_plugins.py`、全部 opendbc safety、cppcheck MISRA、可用时 mutation、F4/H7/body 构建与 RAM/flash 对照。运行 `XPILOT_RULES_ARTIFACT=<路径> PYTHONPATH=opendbc_repo python -m unittest opendbc.safety.tests.test_xpilot_rules` 保存可重复的流摘要。主机检查、固件构建、设备 active commit 和刷写分别报告；本任务无设备访问。
 
-Tesla 接管例外（用户 2026-10-25 决定）：`safety.h` 的最低频率检查遵守 `ignore_frequency_check`，时效、校验和、计数器和质量检查不变；SP 扩展允许原车 Autosteer 设置（mixed AP），以后由 mixed AP 插件接管，不改上游 `carstate.py` 或 panda 的 Autosteer 安全逻辑。
+Tesla 接管例外（用户 2026-10-25 决定）：`safety.h` 的最低频率检查遵守 `ignore_frequency_check`，时效、校验和、计数器和质量检查不变；G4（用户 2026-10-26 决定）移除 SP 扩展的全局 `invalidLkasSetting=False`，CarState 保留真实原车 Autosteer 设置。仅开启 `tesla_mixed_control` 时由其 `event.filter` 删除该事件，关闭或未安装插件即恢复 SP 行为。插件 1.1.0 声明 `requires.hooks=["event_filter"]`；旧宿主拒绝未知 claim，必须同一次 offroad 会话先更新系统再安装插件。此任务不实现 AP owner/交接（G3），不改上游 `carstate.py` 或 panda 安全逻辑。
+
+### G8 动态纵向 owner（X-20261026-49C，host + X-48 固件）
+
+线协议和 DRAIN 时序见 [wire contract](docs/design/xpilot-long-owner.md)，主机实现、
+reader audit 和验证限制见 [host contract](docs/design/xpilot-long-owner-host.md)。本分支包含
+X-48 固件，Panda 独占 STOCK/SP 裁决；能力位不是 owner，runtime rules 不能授予 0x2B9。
+仅 health.h hash `0x25f8efcd`（637071309）和 54 字节有效包启用 A5；旧 49 字节固件保持
+CP 选定的 owner 和原 CAN 行为，不发送 A5。见过新 ABI 后丢失 ABI 会锁定切换，不回退旧 SP 路径。
+
+`Plugin.long_owner(CP, CP_SP, params)` 返回 `desired(ctx, CS)` 策略对象；独占 claim 为
+`role:long.owner`，清单须声明 `requires.hooks=["long_owner"]`，HOST_CAPS 同步发布 hook。
+controlsd 启动时只调用一次 `plugins.long_owner_policy(params, CP, CP_SP)` 固定 winner；
+`desired_owner(ctx, CS)` 每周期接线此 callable。返回 None 保持 owner，stock/sp 仅为提议。
+构建/调用错误、坏输出会 fault 并在本行程禁用该策略，不提升 loser。运行时故障锁定至 disengage。
+
+`XpLongOwnerManual` 为核心 BOOL，默认关闭，只在停车设置页修改、下次行程读取。
+手动触发为车辆总线 bus 1 的 `UI_status2`（0x3DF）`UI_activeTouchPoints == 4` 上升沿；
+先观察非四指样本，按住不重触发。3/5 指不触发纵向；MADS 仍严格匹配其配置的指头数，
+配置 3 指时不会被四指触发。雨刷按钮只保留原车功能。手动脉冲优先于插件提议，宿主保持目标
+经过 1 s debounce 和请求确认，提交、拒绝、锁定或 disengage 时清除，绝不直接改 owner 或 CP。
+若另将 MADS 配成 4 指，会共享同一手势；同时使用手动纵向时将 MADS 配为 3 或 5 指。
+
+Host floor：目标确认 1 s，完成/拒绝后 cooldown 2 s；gas/brake/standstill/stockAeb/accFault、
+|aEgo|≥0.35、lead TTC<3 s、OEM 不活跃/过期及对应 accel 两端差>0.20 均拒绝。
+两次连续拒绝、request/ack 不符>0.5 s、健康包/策略故障后锁定切换直到 disengage；拒绝保持
+ack owner，Panda reset 跟随 STOCK。CC_SP 与 CC 同周期配对；longActive/override/cancel、
+planner/LongControl 和 CAN 使用同一 owner，card 拒绝不配对消息。
+
+STOCK 不发 ACC_ON/accel；pending SP 候选帧是交接例外。SP OEM+1 counter lock 在 OEM
+缺失 60 ms 后恢复 40 ms cadence；接管从 aEgo 开始，最长 1 s 的 +0.6/-1.5 m/s³ ramp。
+SP→STOCK pending 时主机继续正常 TX；Panda DRAIN 阻断 SP，等下一 OEM 提交 STOCK，
+50 ms 中止保留 SP。仅 DRAIN 中止允许恢复帧 counter jump；请求总期限 250 ms。
+原车 AEB 优先，STOCK 的 inactive cancel-only 例外和心跳丢失 SILENT 保持 X-48 合同。
+
+大屏/mici 共用 HUD chip，仅 live/valid 且 ABI 可用时显示 STOCK/SP、ACTIVE/IDLE 和最后
+拒绝原因（最多 30 字符）。SP owner 时最多 25 Hz 将 OEM bus-2 0x2B9、SP accel 经既有
+cloudlog/logMessage 写入 rlog，无新 service/upload。缺帧不补造。
+
+`long_owner_check.py` 覆盖 host 回放、451 组 DRAIN 模型、手动脉冲保持与 health ABI；
+`plugin_host_check.py` 覆盖 hook 裁决、故障、四指沿、MADS 3 指隔离和 shadow；真实 libsafety
+G8 检查来自合并的 X-48。确定性 host/模型和固件测试不证明 IPC、物理触摸、总线或实车交接。
+原生 MPC pre-solve seed 与实际求解轨迹分开报告；G3 横向和 X-50 速度策略不在本改动内。
+
+固件：本分支已实现 owner/pending/DRAIN 固件状态机、A5 请求和 54 字节 health；
+Tesla 纵向能力位在 debug/release 均生效。RX/转发、TX/入队、请求、health、模式切换和 tick
+使用嵌套临界区保护，心跳丢失 SILENT 代码保持原样。
+SP→stock 按协调者 DRAIN 决定：收到与最后 SP 同计数器的 OEM 时阻断并暂停 SP TX；
+下一 OEM（SP+1）通过检查后提交 STOCK 并转发。DRAIN 最长 50 ms，失败则清 pending、
+保留 SP owner 并恢复 SP TX；此中止路径的主机恢复帧可能跳计数器。正常 SP owner 期间计数器由主机
+OEM+1 锁定，Panda 只在交接边界强制连续性，不新增正常 SP 帧的连续性检查。请求总期限仍为 250 ms。
+STOCK owner 且无 DRAIN 时，允许沿用 non-long cancel 条件的 0x2B9：
+accState=13、加速度 min/max 均为 inactive（raw 375）、无主机 AEB、原车 AEB 未激活且 checksum 正确；
+原有白名单、relay 和 Autopark 检查仍生效。其余主机纵向帧仍阻断。Cancel 不作为 SP 接管候选，
+也不更新 SP/已转发 OEM 样本；pending SP 时有效 cancel 仍放行，并以 DISENGAGED（4）清除 pending，
+无效 cancel 不改变 pending。
+真实 libsafety 回归保留全部中间 SP 帧，覆盖 25 Hz/100 Hz 相位和抖动下的活性与中止。
+X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试须用户另行批准。
 
 ## 7. 雷达接入接口
 
@@ -421,7 +490,7 @@ Tesla 接管例外（用户 2026-10-25 决定）：`safety.h` 的最低频率检
 - **行驶时**：mici 画面默认在 `(300,59,1560,699)`（第 1–6 列 × 第 0–2 行这块区域里按 536:240 居中，缩放约 2.91），这 18 格不放磁贴；磁贴绕着它排：第 0 列、第 7 列和第 3 行的第 1–6 列，共 14 格。没固定位置的磁贴在自己支持的尺寸里从保存的尺寸往小试，放得下就用。2026-10-25 用户决定覆盖旧的“画面固定”规则：从画面内开始拖动可移动画面，松手时吸附到整格，6×3 格的占位保持在网格内（列 0–2、行 0–1）。位置改变后沿用上述 first-fit 重排，覆盖的固定磁贴也重新找空位。其余触摸全部忽略，画面内点击也不交给 mici 控件；报警仍只由 mici 在画面内显示一次。
 - **摄像头颜色**：接合与未接合都保持彩色；`cameraview.py` 固定 shader 的 `engaged=0`，保留原 shader 和驾驶员相机增强。
 - **停车时**：显示停车布局。点一下磁贴打开它的详情页（有 `PAGE` 的）；长按（0.6 s）磁贴或空格进入编辑模式。
-- **编辑模式**（只在停车时）：三个按钮 `Park | Drive | Done` 为 320×160 px、56 px 字号。三个大按钮不能竖排进一个空格，因此横排放在底部一行中间的四格；编辑行驶布局时，如果画面在下方，就改放顶部空行。编辑期间 `place/add_cell` 保留这四格，磁贴临时重排且不覆盖按钮、加号或 Driving view；退出后释放，不改保存的磁贴位置。Park/Drive 切换布局，Done 退出。编辑行驶布局时灰色画面仍可拖动吸附，HUD 框的交互优先于画面。选中磁贴可改尺寸、取消固定或拖动固定；点加号打开 Add tiles；点空白取消选中。
+- **编辑模式**（只在停车时）：三个按钮 `Park | Drive | Done` 为 320×160 px、56 px 字号。三个大按钮不能竖排进一个空格，因此横排占边缘一行的四格宽度。按钮栏**不保留格子**（用户 2026-10-26）：编辑和平时的磁贴位置完全相同，任何格子都能放磁贴；按钮栏放在遮挡磁贴和加号最少的位置（停车布局在底行或顶行，优先底部中间；行驶布局只用画面外的那一边，永不遮挡 Driving view）。拖动磁贴、画面或 HUD 时按钮栏隐藏，可直接放到它下面的格子；只有点击属于按钮栏，从按钮栏上开始的拖动会拿起下面的磁贴。Park/Drive 切换布局，Done 退出。编辑行驶布局时灰色画面仍可拖动吸附，HUD 框的交互优先于画面。选中磁贴可改尺寸、取消固定或拖动固定；点加号打开 Add tiles；点空白取消选中。
 - **保存**：布局存在 `XpilotTileLayout`（JSON `{"park": {"tiles": [[id, 尺寸, 列, 行], ...], "hidden": [id, ...]}, "drive": {"tiles": [...], "hidden": [...], "view": [列, 行], "hud": {"插件 id": [fx, fy, visible]}}}`，列/行为 `null` 表示不固定；旧格式 `{"tiles": [[id, 尺寸]], "hidden": [...]}` 读作停车布局），不进 `params_keys.h`，由 `plugin_params.ParamsView` 存成文件 `/data/xpilot_plugins/.params/XpilotTileLayout`。读取时丢掉不认识的 id、不属于这套布局的磁贴和不支持的尺寸；新出现的磁贴按 (`order`, `id`) 用默认尺寸排到最后；插件关闭时它的磁贴不显示但位置保留。`drive.view` 缺失、格式错误或越界时回到默认 `(1,0)`；移动画面时两套磁贴布局一起保存。
 - **加磁贴**：插件的写在 `plugins/<名字>/ui.py`；不属于插件的放 `openpilot/tesla/ui/slots/`。继承 `Tile`，写 `SPEC = TileSpec(id, title, sizes=..., services=..., show="onroad"|"offroad"|"always", hz=..., order=...)`，会被自动发现。磁贴没有自己的颜色：都使用宿主设置的 `Tile.COLOR`，行驶时为中性深灰，停车时为所选主题色。
   - `show` 必填、只接受上述三个值、没有默认值；`manifest_check.py` M13 检查内置声明，`store_e2e.py` E8 用同一检查扫描商店安装后的 `ui.py`。Park 的添加列表只含 offroad/always，Drive 只含 onroad/always。`tiles.add_cell/move/place` 始终避开当前 Driving view，不能把磁贴放入画面。
@@ -515,3 +584,9 @@ CI（`.github/workflows/xpilot.yaml`）在每个 PR 上跑以上检查（`upstre
 校验失败记录故障并保留基础语言，不自动修改插件开关。
 语言插件资源只保存在 xpilot-plugins 的对应插件目录；宿主只保留通用接口和 tr 标记。
 
+### G8 host wire consumer (X-20261026-49C)
+
+The exact X-48 54-byte owner-health hash enables A5; legacy 49-byte firmware stays pinned.
+The exclusive long_owner hook, claims and HOST_CAPS ship with controlsd policy/manual integration.
+Runtime floors, paired CC_SP, CAN cadence, reader audit and proof limits are in the
+[host contract](docs/design/xpilot-long-owner-host.md). No device or flash proof is claimed.

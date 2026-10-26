@@ -4,6 +4,7 @@ from openpilot.tesla.plugin import Setting
 from openpilot.system.ui.lib.multilang import tr
 
 VEHICLE_SETTINGS = (
+  Setting('XpLongOwnerManual', 'Manual Long Owner (wiper first detent)'),
   Setting('TeslaCoopSteering', 'Cooperative Steering'),
   Setting('TeslaMadsScreenButton', 'MADS Screen Activation',
           choices=(('Off', 0), ('3-Finger', 1), ('4-Finger', 2), ('5-Finger', 3))),  # upstream MadsScreenButtonType
@@ -12,6 +13,10 @@ VEHICLE_SETTINGS = (
 
 def setting_label(setting: Setting, value, metric: bool = True) -> str:
   """A unit "km/h|mph" is metric|imperial."""
+  if setting.type == 'secret':
+    return '******' if value else 'Not set'
+  if setting.type == 'text':
+    return value or 'Not set'
   if setting.range is not None:
     unit, divisor = setting.range[3].split('|')[0 if metric else -1], setting.range[4]
     number = f'{value / divisor:.1f}' if divisor != 1 else str(value)
