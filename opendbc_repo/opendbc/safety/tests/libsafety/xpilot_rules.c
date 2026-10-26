@@ -1,5 +1,10 @@
+// Keep the firmware CRC symbols private to this host harness: ELF may otherwise
+// resolve crc32 to Python's zlib, whose three-argument ABI is incompatible.
+#define crc32 xpilot_test_crc32
+#define crc32_init xpilot_test_crc32_init
 #include "../../../../../panda/board/crc.h"
 #include "../../../../../panda/board/xpilot_rules.h"
+#undef crc32
 #include "opendbc/safety/plugins/registry.h"
 #define XPILOT_PARAM_SP_NAVASSIST 0x1000U
 #include "opendbc/safety/tests/fixtures/navassist.h"
@@ -22,4 +27,5 @@ uint32_t test_old_state(unsigned int i, unsigned int member) {
   if (i == 1U) { return member == 0U ? ambient_session_count : (member == 1U ? ambient_tx_ts : ambient_session_ts); }
   return member == 0U ? navassist_session_count : (member == 1U ? navassist_last_tx_ts : navassist_session_ts);
 }
-void test_init(void) { crc32_init(); }
+void test_init(void) { xpilot_test_crc32_init(); }
+#undef crc32_init
