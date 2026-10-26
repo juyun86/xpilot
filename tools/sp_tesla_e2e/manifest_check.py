@@ -188,6 +188,9 @@ def main() -> int:
     write(root, "bad_api", api=mf.API_VERSION + 1)
     write(root, "bad_claim", claims=["can.tx:hello"])
     write(root, "unknown_kind", claims=["teleport:now"])
+    write(root, 'bad_params_null', params=None)
+    write(root, 'bad_params_list', params=[])
+    write(root, 'bad_param_spec', params={'ExtFixture': False})
     (root / "bad_json").mkdir()
     (root / "bad_json" / "plugin.json").write_text("{nope")
     try:
@@ -196,7 +199,7 @@ def main() -> int:
       errors.append(f"M1 load_all raised {e!r}")
       found, errs = [], {}
     ids = [m.id for m in found]
-    for bad in ("wrong_id", "bad_cat", "bad_api", "bad_claim", "bad_json"):
+    for bad in ("wrong_id", "bad_cat", "bad_api", "bad_claim", "bad_json", 'bad_params_null', 'bad_params_list', 'bad_param_spec'):
       if bad in ids or bad not in errs:
         errors.append(f"M1 {bad} not rejected with an error")
     if "unknown_kind" in ids or "unknown_kind" not in errs:

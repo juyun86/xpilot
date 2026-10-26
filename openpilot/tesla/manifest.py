@@ -167,8 +167,13 @@ def parse(path: Path) -> Manifest:
   if not isinstance(claims, list) or not all(isinstance(c, str) and _CLAIM_RE.fullmatch(c) for c in claims):
     raise ValueError(f"bad claims {claims!r}")
   requires = d.get("requires", {})
-  for key, spec in d.get('params', {}).items():
-    if not isinstance(spec, dict) or 'aliases' not in spec:
+  parameter_specs = d.get('params', {})
+  if not isinstance(parameter_specs, dict):
+    raise ValueError('params must be an object')
+  for key, spec in parameter_specs.items():
+    if not isinstance(spec, dict):
+      raise ValueError('parameter specs must be objects')
+    if 'aliases' not in spec:
       continue
     aliases = spec['aliases']
     if (not isinstance(aliases, list) or len(aliases) > 8
