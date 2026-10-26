@@ -31,7 +31,7 @@ claims 不是防恶意代码的 OS 沙箱；AGNOS 已有 sudo 权限不由此 AP
 
 ## 状态消息
 
-Starlink 声明 msg:network.vpn 和 source:pluginMsg。当前传输仅支持单发布者，独占 source 声明避免与其他声明该 source 的插件同时启用；不宣称提供多发布者 broker。
+Starlink 声明 msg:network.vpn 和 source:plugin_msg。当前传输仅支持单发布者，独占 source 声明避免与其他声明该 source 的插件同时启用；不宣称提供多发布者 broker。
 每 3 秒用 plugins.send_msg 发布 running/gateway/configured/nodes/message，有效期 6000 ms，不含凭据或节点身份。
 磁贴用 PluginMsgs.fresh('network.vpn') 读取；无新鲜消息显示停止。长操作或退避期间过期也显示停止，不保留过期的“已连接”。
 
