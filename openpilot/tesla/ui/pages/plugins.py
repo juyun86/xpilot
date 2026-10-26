@@ -112,7 +112,7 @@ class PluginsPage(Widget):
     self.pages: dict[str, PluginPage] = {}
     self.selected = 0
     self.fetched = False
-    self.refresh_button = Button(lambda: "working..." if jobs.busy else f"Refresh ({'failed' if jobs.failed else jobs.status})",
+    self.refresh_button = Button(lambda: tr("working...") if jobs.busy else f"{tr('Refresh')} ({tr('failed') if jobs.failed else tr(jobs.status)})",
                                  lambda: jobs.run(jobs.fetch), font_size=40)
     self.refresh_button.set_enabled(lambda: not jobs.busy)
     self._build()
@@ -129,15 +129,15 @@ class PluginsPage(Widget):
     for title, plugins, entries in market_sections(jobs.entries):
       page = ListPage()
       for p in plugins:
-        summary = f"{p.MANIFEST.use.replace('both', 'onroad + offroad')} - v{p.MANIFEST.version} - {p.MANIFEST.author or 'unknown'} - {p.DESCRIPTION}"
+        summary = f"{tr(p.MANIFEST.use.replace('both', 'onroad + offroad'))} - v{p.MANIFEST.version} - {p.MANIFEST.author or 'unknown'} - {tr(p.DESCRIPTION)}"
         if p.SETTINGS:
-          summary += f"\nTap for settings ({len(p.SETTINGS)})"
+          summary += f"\n{tr('Tap for settings')} ({len(p.SETTINGS)})"
         page.add(self.switches.make(p, summary, on_tap=lambda p=p: self._open_plugin(p)))
       for e in entries:
-        use = e.use.replace("both", "onroad + offroad") if e.use in ("onroad", "offroad", "both") else "use not declared"
-        page.add(InfoRow(lambda e=e: f"{e.name} - {jobs.row_value(jobs.current(e.id) or e)}",
-                         f"{use} - v{e.version} - {e.author} - {e.description}\nInstall & enable restarts while parked.",
-                         ButtonAction(lambda e=e: jobs.action(jobs.current(e.id) or e), enabled=lambda e=e: jobs.can_act(e.id)),
+        use = tr(e.use.replace("both", "onroad + offroad")) if e.use in ("onroad", "offroad", "both") else tr("use not declared")
+        page.add(InfoRow(lambda e=e: f"{tr(e.name)} - {jobs.row_value(jobs.current(e.id) or e)}",
+                         f"{use} - v{e.version} - {e.author} - {tr(e.description)}\n{tr('Install & enable restarts while parked.')}",
+                         ButtonAction(lambda e=e: tr(jobs.action(jobs.current(e.id) or e)), enabled=lambda e=e: jobs.can_act(e.id)),
                          callback=lambda e=e: jobs.run(lambda: jobs.act(e.id))))
       self.sections.append((title, page))
     self.selected = max(0, min(self.selected, len(self.sections) - 1))

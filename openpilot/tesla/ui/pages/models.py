@@ -21,9 +21,9 @@ SOURCES = (("qcom", "Small models"), ("chestnut", "Big models"))
 
 
 def _row(title, text, value, callback, enabled=True) -> ListItem:
-  action = ButtonAction(text, enabled=enabled)
+  action = ButtonAction(tr(text), enabled=enabled)
   action.set_value(value)
-  return ListItem(title=title, action_item=action, callback=callback)
+  return ListItem(title=tr(title), action_item=action, callback=callback)
 
 
 def _status(bundle) -> tuple[str, str, str, str, bool]:
@@ -110,8 +110,8 @@ class ModelsPage(ListPage):
                          callback=lambda: params.remove("ModelManager_DownloadRef"))
     cancel.set_visible(lambda: self._downloading and params.get("ModelManager_DownloadRef") is not None)
     self.add(
-      text_item(lambda: self._s[0].capitalize(), lambda: self._s[1]),
-      text_item(lambda: self._s[2].capitalize(), lambda: self._s[3]),
+      text_item(lambda: tr(self._s[0].capitalize()), lambda: self._s[1]),
+      text_item(lambda: tr(self._s[2].capitalize()), lambda: tr(self._s[3])),
       *[_row(label, tr("SELECT"), lambda s=source: _selected_name(s), lambda s=source: self._choose(s), offroad) for source, label in SOURCES],
       cancel,
       _row(tr("Refresh model list"), tr("REFRESH"), lambda: "fetching..." if self._refreshing() else "", self._refresh,
