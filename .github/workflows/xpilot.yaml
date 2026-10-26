@@ -50,11 +50,13 @@ jobs:
       run: |
         set -e
         for check in static_imports tile_layout_check plugin_host_check manifest_check safety_manifest_check \
-                     phase2_check phase3_check phase4_check store_check offroad_pages_check agnos_update_check; do
+                     phase2_check phase3_check phase4_check store_check offroad_pages_check agnos_update_check network_contract_check; do
           echo "::group::$check"
           python3 tools/sp_tesla_e2e/$check.py > /tmp/xpilot-ci/$check.json
           echo "::endgroup::"
         done
+    - name: Language compatibility contract
+      run: python3 tools/sp_tesla_e2e/language_contract_e2e.py --plugins xpilot-plugins
     - name: Store activation transaction end to end
       run: python3 tools/sp_tesla_e2e/store_activation_e2e.py --output /tmp/xpilot-ci/store-activation
     - name: Plugin repository end to end

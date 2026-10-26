@@ -2,6 +2,7 @@
 malformed catalog applied, inactive owner invoked, and English dynamic labels.
 Uses synthetic params and a plugin class loaded from the actual reviewed source.
 """
+import argparse
 import importlib.util
 from pathlib import Path
 import sys
@@ -26,7 +27,9 @@ with tempfile.TemporaryDirectory() as directory:
     assert not view.get_bool('ExtLocale'), 'legacy value overrode explicit disable'
     assert old.read_text() == '1', 'rollback value destroyed'
 
-package = ROOT.parent / 'xpilot-plugins/plugins/chinese_ui'
+parser = argparse.ArgumentParser()
+parser.add_argument('--plugins', type=Path, default=ROOT.parent / 'xpilot-plugins')
+package = parser.parse_args().plugins.resolve() / 'plugins/chinese_ui'
 spec = importlib.util.spec_from_file_location('contract_locale', package / 'plugin.py')
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
