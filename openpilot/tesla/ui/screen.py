@@ -444,7 +444,7 @@ class BigScreenHost:
     if drive:
       vx, vy, vw, vh = self._drive_view()
       rl.draw_rectangle_rec(rl.Rectangle(vx, vy, vw, vh), rl.Color(40, 42, 50, 255))
-      label = "Driving view"
+      label = tr("Driving view")
       width = measure_text_cached(gui_app.font(FontWeight.MEDIUM), label, 48).x
       rl.draw_text_ex(gui_app.font(FontWeight.MEDIUM), label, rl.Vector2(vx + (vw - width) / 2, vy + vh / 2 - 24), 48, 0, DIM)
     self._draw_tiles(placed, now)
@@ -461,9 +461,9 @@ class BigScreenHost:
         label = name.removeprefix("builtin:").replace("_", " ").title() if name.startswith("builtin:") else name
         width = min(w - 24, 360)
         lines_in(rl.Rectangle(x + (w - width) / 2, y + 12, width, h - 24),
-                 [label, "Move only"] if name in tiles.HUD_REQUIRED else [label] if visible else [label, "Hidden"], 32)
+                 [tr(label), tr("Move only")] if name in tiles.HUD_REQUIRED else [tr(label)] if visible else [tr(label), tr("Hidden")], 32)
       for name, (x, y, w, h) in tiles.hud_buttons(boxes, self._drive_view()).items():
-        label = "Hide" if self._hud.get(name, [0, 0, True])[2] else "Show"
+        label = tr("Hide") if self._hud.get(name, [0, 0, True])[2] else tr("Show")
         rl.draw_rectangle_rec(rl.Rectangle(x, y, w, h), rl.WHITE)
         text(FontWeight.SEMI_BOLD, label, x + (w - text_w(FontWeight.SEMI_BOLD, label, 40)) / 2, y + (h - 40) / 2,
              40, rl.Color(20, 20, 24, 255))

@@ -17,17 +17,16 @@ PAD = 16
 
 
 def text_w(weight: FontWeight, text: str, size: int) -> float:
-  return rl.measure_text_ex(font_fallback(gui_app.font(weight)), tr(text), size, 0).x
+  return rl.measure_text_ex(font_fallback(gui_app.font(weight)), text, size, 0).x
 
 
 def text(weight: FontWeight, s: str, x: float, y: float, size: int, color=rl.WHITE) -> None:
   # gui_app scales rl.draw_text_ex by FONT_SCALE but not rl.measure_text_ex; undo it so size is real px and text_w is exact
-  rl.draw_text_ex(gui_app.font(weight), tr(s), rl.Vector2(x, y), size / FONT_SCALE, 0, color)
+  rl.draw_text_ex(gui_app.font(weight), s, rl.Vector2(x, y), size / FONT_SCALE, 0, color)
 
 
 def clip(weight: FontWeight, s: str, size: int, w: float) -> str:
   """s, or its longest prefix plus "..." that fits w px."""
-  s = tr(s)
   if text_w(weight, s, size) <= w:
     return s
   while s and text_w(weight, s + "...", size) > w:
@@ -75,7 +74,7 @@ class Tile:
       tex = gui_app.texture(icon, side, side)
       rl.draw_texture(tex, int(rect.x + (rect.width - tex.width) / 2), int(rect.y + (rect.height - tex.height) / 2 - 16), rl.WHITE)
     size = self.title_size(rect)
-    text(FontWeight.MEDIUM, clip(FontWeight.MEDIUM, self.SPEC.title, size, rect.width - 2 * PAD), rect.x + PAD,
+    text(FontWeight.MEDIUM, clip(FontWeight.MEDIUM, tr(self.SPEC.title), size, rect.width - 2 * PAD), rect.x + PAD,
          rect.y + rect.height - size - 14, size)
 
   def draw_value(self, rect: rl.Rectangle, value: str, unit: str = "", sub: str = "") -> None:
