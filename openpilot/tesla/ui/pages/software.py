@@ -85,7 +85,7 @@ class BranchPage(ListPage):
         branches.insert(0, b)
     current = params.get("UpdaterTargetBranch") or ""
     for b in branches:
-      self.add(button_item(b, "CURRENT" if b == current else "SELECT", callback=lambda b=b: on_select(b), enabled=ui_state.is_offroad))
+      self.add(button_item(b, tr("CURRENT") if b == current else tr("SELECT"), callback=lambda b=b: on_select(b), enabled=ui_state.is_offroad))
 
   def show_event(self):
     super().show_event()
@@ -97,14 +97,14 @@ class SoftwarePage(ListPage):
     self.checker = UpdateChecker()
     params = ui_state.params
     value = self.checker.value
-    action = ButtonAction(lambda: "DOWNLOAD" if value() == "download update" else "CHECK",
+    action = ButtonAction(lambda: tr("DOWNLOAD") if value() == "download update" else tr("CHECK"),
                           enabled=lambda: not ui_state.started and not self.checker.busy())
-    check = ListItem(lambda: f"Update: {value()}" if value() else "Check for update", action_item=action,
+    check = ListItem(lambda: tr("Update: {status}").format(status=tr(value())) if value() else tr("Check for update"), action_item=action,
                      callback=lambda: self.checker.press(value()))
-    install = button_item(lambda: f"Install {self._new_version()}", tr("INSTALL"), callback=lambda: threading.Thread(
+    install = button_item(lambda: tr("Install {version}").format(version=self._new_version()), tr("INSTALL"), callback=lambda: threading.Thread(
       target=lambda: params.put_bool("DoReboot", True, block=True), daemon=True).start())
     install.set_visible(lambda: ui_state.is_offroad() and params.get_bool("UpdateAvailable"))
-    branch = button_item(tr("Target branch"), lambda: params.get("UpdaterTargetBranch") or "SELECT", callback=self._choose_branch,
+    branch = button_item(tr("Target branch"), lambda: params.get("UpdaterTargetBranch") or tr("SELECT"), callback=self._choose_branch,
                          enabled=ui_state.is_offroad)
     branch.set_visible(not params.get_bool("IsTestedBranch"))
     self.add(

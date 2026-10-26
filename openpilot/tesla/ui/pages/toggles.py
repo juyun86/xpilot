@@ -16,8 +16,8 @@ PERSONALITIES = ["aggressive", "standard", "relaxed"]
 class TogglesPage(ListPage):
   def __init__(self):
     super().__init__()
-    self.personality = multiple_button_item("Following distance", PERSONALITY_DESC,
-                                            [p.capitalize() for p in PERSONALITIES], 0, button_width=250, callback=self._set_personality)
+    self.personality = multiple_button_item(tr("Following distance"), tr(PERSONALITY_DESC),
+                                            [tr(p.capitalize()) for p in PERSONALITIES], 0, button_width=250, callback=self._set_personality)
     self.personality.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control)
     self.cruise = ListItem(tr("Initial cruise speed"), description=tr("Cruise speed set when cruise is engaged."),
                            action_item=ButtonAction(self._cruise_text), callback=self._next_cruise_speed)
@@ -37,7 +37,7 @@ class TogglesPage(ListPage):
                   enabled=not_engaged, after=restart_needed_callback),
     ]
     self.theme_params = ParamsView(ui_state.params, LAYOUT_SPEC)
-    self.theme = multiple_button_item("Tile color", "Color of every tile on the home screen.", list(THEMES), 0, button_width=200,
+    self.theme = multiple_button_item(tr("Tile color"), tr("Color of every tile on the home screen."), [tr(name) for name in THEMES], 0, button_width=200,
                                       callback=lambda i: self.theme_params.put(THEME_PARAM, list(THEMES)[i]))
     self.add(self.personality, self.cruise, *(t.item for t in self.toggles), self.theme)
 
