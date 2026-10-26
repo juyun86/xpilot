@@ -4,6 +4,7 @@ params it hands to plugins, settings pages and enable checks, so plugin code use
 Supported types for downloaded plugins: STORE_TYPES (flags are ignored: values persist until the plugin changes them)."""
 import json
 import os
+import re
 import tempfile
 
 from openpilot.tesla import manifest as mf
@@ -62,9 +63,20 @@ class ParamsView:
     try:
       raw = self._path(key).read_text()
     except FileNotFoundError:
-      if not return_default or "default" not in spec:
-        return None
-      raw = str(spec["default"])
+      raw = None
+      for alias in spec.get('aliases', []):
+        if (not isinstance(alias, str) or not re.fullmatch('[A-Za-z][A-Za-z0-9_]*', alias)
+            or alias in self._specs or alias in mf.compiled_param_keys()):
+          raise ValueError('Invalid or conflicting legacy parameter alias')
+        try:
+          raw = self._path(alias).read_text()
+          break
+        except FileNotFoundError:
+          continue
+      if raw is None:
+        if not return_default or "default" not in spec:
+          return None
+        raw = str(spec["default"])
     try:
       return _decode(spec["type"], raw)
     except ValueError:

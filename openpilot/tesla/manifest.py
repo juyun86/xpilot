@@ -167,6 +167,14 @@ def parse(path: Path) -> Manifest:
   if not isinstance(claims, list) or not all(isinstance(c, str) and _CLAIM_RE.fullmatch(c) for c in claims):
     raise ValueError(f"bad claims {claims!r}")
   requires = d.get("requires", {})
+  for key, spec in d.get('params', {}).items():
+    if not isinstance(spec, dict) or 'aliases' not in spec:
+      continue
+    aliases = spec['aliases']
+    if (not isinstance(aliases, list) or len(aliases) > 8
+        or not all(isinstance(a, str) and re.fullmatch('[A-Za-z][A-Za-z0-9_]*', a) and a != key for a in aliases)
+        or not isinstance(requires, dict) or requires.get('params_abi') != 1):
+      raise ValueError('parameter aliases require valid names and params_abi 1')
   if "role:long.owner" in claims and (not isinstance(requires, dict) or not isinstance(requires.get("hooks"), list)
                                      or "long_owner" not in requires["hooks"]):
     raise ValueError("role:long.owner requires hooks: [long_owner]")
@@ -246,9 +254,10 @@ RULE_ABI = 1
 HOST_CAPS = {
   "hooks": ("__init__", "setup", "observe_can", "publish_state", "control_sends", "service_params", "processes",
             "role_processes", "alert_source", "lane_change_policy", "lat_correction", "lat_controller", "long_owner", "long_planner",
-            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "external_provider", "ui_language", "ui_glyphs"),
+            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "external_provider", "ui_language", "ui_glyphs", "network_vpn"),
   "msg": ("*",),  # pluginMsg transports every valid kind; no payload schema or multi-publisher broker implied.
   "rule_abi": RULE_ABI,
+  "params_abi": 1,  # Read-only legacy aliases; explicit new values always win.
   "native": host_platform(),
 }
 UPDATE_COMPAT_PARAM = "XpilotUpdateIncompatiblePlugins"
@@ -262,8 +271,8 @@ def compatible(manifest, caps) -> tuple[bool, str]:
   if manifest.platform is not None and not all(manifest.platform.get(k) == v for k, v in caps["native"].items()):
     return False, f"built for {manifest.platform}, this device is {caps['native']}"
   requires = manifest.requires
-  if not isinstance(requires, dict) or set(requires) - {"hooks", "msg", "rule_abi", "native"}:
-    return False, "bad requires: expected hooks/msg/rule_abi/native object"
+  if not isinstance(requires, dict) or set(requires) - {"hooks", "msg", "rule_abi", "params_abi", "native"}:
+    return False, "bad requires: expected hooks/msg/rule_abi/params_abi/native object"
   for key in ("hooks", "msg"):
     names = requires.get(key, [])
     if not isinstance(names, list) or not all(isinstance(n, str) and re.fullmatch(r"[a-z_][a-z0-9_.]*", n) for n in names):
@@ -277,6 +286,8 @@ def compatible(manifest, caps) -> tuple[bool, str]:
       return False, f"requires rule_abi {abi!r}, host supports {caps['rule_abi']!r}"
   if "native" in requires and requires["native"] != caps["native"]:
     return False, f"requires native {requires['native']!r}, host supports {caps['native']}"
+  if 'params_abi' in requires and (type(requires['params_abi']) is not int or requires['params_abi'] != caps.get('params_abi')):
+    return False, 'requires unsupported params_abi'
   return True, ""
 
 

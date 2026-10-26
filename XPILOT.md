@@ -80,6 +80,9 @@ panda/board/xpilot_rules.h   app EP2 loader
 
 ## 4. Python 插件接口（`openpilot/tesla/plugin.py`）
 
+网络/特权操作使用 [宿主 IPv4 VPN API](docs/design/xpilot-network-api.md)，能力探测为 requires.hooks 的 network_vpn。
+参数旧键兼容使用 spec.aliases 并要求 requires.params_abi=1；新键显式值优先、读取不写文件，旧宿主拒绝该需求。
+
 ### 4.1 插件清单 `plugin.json`
 
 ```json

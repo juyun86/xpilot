@@ -47,7 +47,10 @@ plugins/sample_locale/
 ~~~
 
 下载插件使用 ParamsView 保存自有参数，不需要将这些键编进系统 Params。
-开关默认关闭。实际中文插件使用 XpilotChineseUI，保留其已有键名。
+开关默认关闭。中文插件 1.1.0 使用 ExtChineseUI，通过参数 aliases 兼容此前误用的 XpilotChineseUI。
+清单 requires.params_abi=1；ExtChineseUI 的 spec 声明 aliases: ["XpilotChineseUI"]。
+新键没有值时 ParamsView 读取旧值，不在读取时写文件；显式新值（包括关闭）始终优先，旧文件保留供回退。
+aliases 只接受最多 8 个普通参数名，不能路径穿越、引用自身、已登记参数或编译键；旧宿主拒绝新 ABI，避免丢失启用状态。
 
 ## 2. 方法及返回格式
 

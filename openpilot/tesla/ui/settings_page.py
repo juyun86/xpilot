@@ -3,6 +3,7 @@ SettingsList renders any Setting rows; the Plugins page (plugins_page.py) reuses
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.tesla.plugins import view
 from openpilot.tesla.ui.settings_meta import VEHICLE_SETTINGS, setting_choices, setting_label
@@ -13,7 +14,7 @@ from openpilot.sunnypilot.hardware.profile import has_driver_camera
 
 def _page() -> NavScroller:
   page = NavScroller()
-  back = BigButton('Back')
+  back = BigButton(tr('Back'))
   back.set_click_callback(gui_app.pop_widget)
   page._scroller.add_widget(back)
   return page
@@ -36,7 +37,7 @@ class SettingsList(NavScroller):
     super().__init__()
     self.toggles = []
     self.choice_buttons = []
-    back = BigButton('Back')
+    back = BigButton(tr('Back'))
     back.set_click_callback(gui_app.pop_widget)
     self._scroller.add_widget(back)
     self.add_settings(settings)
@@ -44,13 +45,13 @@ class SettingsList(NavScroller):
   def add_settings(self, settings) -> None:
     for setting in settings:
       if setting.type is None and setting.range is None and setting.choices is None:
-        toggle = BigToggle(setting.label, initial_state=bool(_params().get(setting.key, return_default=True)),
+        toggle = BigToggle(tr(setting.label), initial_state=bool(_params().get(setting.key, return_default=True)),
                            toggle_callback=lambda value, k=setting.key: (_set_param(k, value), self.show_event()))
         toggle.set_enabled(ui_state.is_offroad)
         self.toggles.append((setting.key, toggle))
         self._scroller.add_widget(toggle)
       else:
-        button = BigButton(setting.label)
+        button = BigButton(tr(setting.label))
         button.set_click_callback(lambda s=setting: self._choose(s))
         button.set_enabled(ui_state.is_offroad)
         self.choice_buttons.append((setting, button))
@@ -81,12 +82,12 @@ class SettingsList(NavScroller):
 class TeslaSettingsMici(SettingsList):
   def __init__(self):
     super().__init__()
-    self.dm_toggle = BigToggle('Driver Monitoring', initial_state=driver_monitoring_configured(ui_state.params),
+    self.dm_toggle = BigToggle(tr('Driver Monitoring'), initial_state=driver_monitoring_configured(ui_state.params),
                                toggle_callback=self._set_driver_monitoring,
-                               description='When off, the DM processes do not start. Change only while parked; applies on the next drive.')
+                               description=tr('When off, the DM processes do not start. Change only while parked; applies on the next drive.'))
     self.dm_toggle.set_enabled(lambda: ui_state.is_offroad() and has_driver_camera())
     self._scroller.add_widget(self.dm_toggle)
-    self.map_toggle = BigToggle('OSM Map Data', initial_state=ui_state.params.get('MapProvider', return_default=True) == 'osm',
+    self.map_toggle = BigToggle(tr('OSM Map Data'), initial_state=ui_state.params.get('MapProvider', return_default=True) == 'osm',
                                 toggle_callback=self._set_map_provider)
     self.map_toggle.set_enabled(ui_state.is_offroad)
     self._scroller.add_widget(self.map_toggle)

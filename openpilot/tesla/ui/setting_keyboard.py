@@ -6,6 +6,13 @@ from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.system.ui.widgets import DialogResult
 from openpilot.system.ui.widgets.inputbox import InputBox
 from openpilot.system.ui.widgets.keyboard import Keyboard
+from openpilot.system.ui.lib.multilang import tr
+
+
+def input_error_text(error):
+  if error.startswith('Maximum ') and error.endswith(' characters'):
+    return tr('Maximum {count} characters').format(count=error.split()[1])
+  return tr(error)
 
 
 class SettingInput(InputBox):
@@ -16,7 +23,7 @@ class SettingInput(InputBox):
   def add_char_at_cursor(self, char):
     value = self.text[:self._cursor_position] + char + self.text[self._cursor_position:]
     error = self.setting.input_error(value)
-    self.keyboard.set_title(self.setting.label, error)
+    self.keyboard.set_title(tr(self.setting.label), input_error_text(error))
     if error:
       return False
     return super().add_char_at_cursor(char)
@@ -49,7 +56,7 @@ def edit_text_setting(setting, params, refresh) -> None:
     return
   keyboard = SettingKeyboard()
   keyboard._input_box = SettingInput(setting, keyboard)
-  keyboard.set_title(setting.label)
+  keyboard.set_title(tr(setting.label))
   if setting.type == "text":
     keyboard.set_text(params.get(setting.key, return_default=True) or "")
 
@@ -57,7 +64,7 @@ def edit_text_setting(setting, params, refresh) -> None:
     if result == DialogResult.CONFIRM and ui_state.is_offroad():
       error = setting.input_error(keyboard.text)
       if error:
-        keyboard.set_title(setting.label, error)
+        keyboard.set_title(tr(setting.label), input_error_text(error))
         gui_app.push_widget(keyboard)
         return
       params.put(setting.key, keyboard.text, block=True)

@@ -4,6 +4,7 @@
 
 ## 插件 API 与设计
 
+- [宿主 IPv4 VPN API](design/xpilot-network-api.md)：固定网络能力、归属、停车复查、生命周期和时效消息。
 - [UI 语言包插件 API](design/xpilot-ui-language-api.md)：语言角色、返回格式、字体和词条校验、启停与错误回退。
 - [可替换核心接口](design/xpilot-replaceable-core.md)：核心角色和宿主边界。
 - [运行时 Panda 规则](design/xpilot-panda-rules.md)：规则表、ABI 与加载流程。
