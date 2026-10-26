@@ -1,4 +1,5 @@
 """Tesla page (native): car model, driver monitoring and OSM map toggles and the VEHICLE_SETTINGS rows of mici TeslaSettingsMici."""
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.hardware.driver_monitoring import driver_monitoring_configured
 from openpilot.sunnypilot.hardware.profile import has_driver_camera
@@ -20,7 +21,7 @@ class ModelPage(ListPage):
 
   def __init__(self):
     super().__init__()
-    self.add(button_item("Auto", lambda: "SELECTED" if _model() == "Auto" else "SELECT", MODEL_DESC,
+    self.add(button_item(tr("Auto"), lambda: "SELECTED" if _model() == "Auto" else "SELECT", MODEL_DESC,
                          callback=lambda: self._pick(None), enabled=ui_state.is_offroad))
     for name, bundle in tesla_models():
       self.add(button_item(name, lambda name=name: "SELECTED" if _model() == name else "SELECT",
@@ -39,14 +40,14 @@ class TeslaPage(ListPage):
   def __init__(self):
     super().__init__()
     self.models = ModelPage()
-    self.model = ListItem("Car model", description=MODEL_DESC, action_item=ButtonAction(_model, width=900, enabled=ui_state.is_offroad),
+    self.model = ListItem(tr("Car model"), description=MODEL_DESC, action_item=ButtonAction(_model, width=900, enabled=ui_state.is_offroad),
                           callback=lambda: self.open("car model", self.models))
-    self.dm = toggle_item("Driver Monitoring", "When off, the DM processes do not start. Change only while parked; applies on the next drive.",
+    self.dm = toggle_item(tr("Driver Monitoring"), "When off, the DM processes do not start. Change only while parked; applies on the next drive.",
                           driver_monitoring_configured(ui_state.params), self._set_dm,
                           enabled=lambda: ui_state.is_offroad() and has_driver_camera())
-    self.map = toggle_item("OSM Map Data", initial_state=self._osm(), callback=self._set_map, enabled=ui_state.is_offroad)
+    self.map = toggle_item(tr("OSM Map Data"), initial_state=self._osm(), callback=self._set_map, enabled=ui_state.is_offroad)
     self.rows = [SettingRow(s) for s in VEHICLE_SETTINGS]
-    self.add(Header("Vehicle"), self.model, *(r.item for r in self.rows), Header("Device"), self.dm, self.map)
+    self.add(Header(tr("Vehicle")), self.model, *(r.item for r in self.rows), Header(tr("Device")), self.dm, self.map)
 
   @staticmethod
   def _osm() -> bool:

@@ -2,6 +2,7 @@
 cancel download, refresh list, clear cache), reusing selfdrive/ui/sunnypilot/model_info.py. Each model list is a native
 sub-page: the default, then one row per bundle under its folder header (favorites first). Select, refresh and clear cache
 are offroad-only (the model manager runs offroad only); clear cache asks in a tici ConfirmDialog."""
+from openpilot.system.ui.lib.multilang import tr
 import time
 
 from openpilot.cereal import custom
@@ -105,18 +106,18 @@ class ModelsPage(ListPage):
     self._refresh_start: float | None = None
     self._cache, self._cache_t = "", 0.0
     offroad = ui_state.is_offroad
-    cancel = button_item(lambda: "Cancel verification" if self._s[4] else "Cancel download", "CANCEL",
+    cancel = button_item(lambda: "Cancel verification" if self._s[4] else "Cancel download", tr("CANCEL"),
                          callback=lambda: params.remove("ModelManager_DownloadRef"))
     cancel.set_visible(lambda: self._downloading and params.get("ModelManager_DownloadRef") is not None)
     self.add(
       text_item(lambda: self._s[0].capitalize(), lambda: self._s[1]),
       text_item(lambda: self._s[2].capitalize(), lambda: self._s[3]),
-      *[_row(label, "SELECT", lambda s=source: _selected_name(s), lambda s=source: self._choose(s), offroad) for source, label in SOURCES],
+      *[_row(label, tr("SELECT"), lambda s=source: _selected_name(s), lambda s=source: self._choose(s), offroad) for source, label in SOURCES],
       cancel,
-      _row("Refresh model list", "REFRESH", lambda: "fetching..." if self._refreshing() else "", self._refresh,
+      _row(tr("Refresh model list"), tr("REFRESH"), lambda: "fetching..." if self._refreshing() else "", self._refresh,
            lambda: offroad() and not self._downloading and not self._refreshing()),
-      _row("Clear model cache", "CLEAR", lambda: "clearing..." if self._clearing else self._cache, lambda: confirm(
-        "Clear the model cache? Selected models download again.", "clear", lambda: params.put_bool("ModelManager_ClearCache", True)),
+      _row(tr("Clear model cache"), tr("CLEAR"), lambda: "clearing..." if self._clearing else self._cache, lambda: confirm(
+        tr("Clear the model cache? Selected models download again."), tr("clear"), lambda: params.put_bool("ModelManager_ClearCache", True)),
            lambda: offroad() and not self._downloading and not self._clearing),
     )
 
@@ -131,7 +132,7 @@ class ModelsPage(ListPage):
   def _choose(self, source: str) -> None:
     bundles = bundles_for_source(source)
     if not bundles:
-      gui_app.push_widget(alert_dialog("No models are available for this hardware yet. Connect to the internet and refresh the model list."))
+      gui_app.push_widget(alert_dialog(tr("No models are available for this hardware yet. Connect to the internet and refresh the model list.")))
       return
     self.open(dict(SOURCES)[source], BundlesPage(source, bundles))
 

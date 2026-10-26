@@ -1,6 +1,7 @@
 """Base of the native offroad pages (UI v3): a vertical list of tici-style rows (system/ui/widgets/list_view.py) in a
 Scroller, drawn by the host in screen pixels inside offroad.content_rect(). Edits are offroad-only, as on the mici pages."""
 import pyray as rl
+from openpilot.system.ui.lib.multilang import tr
 
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import FontWeight, gui_app
@@ -28,7 +29,7 @@ class Header(Widget):
 
   def __init__(self, text: str):
     super().__init__()
-    self._text = text.upper()
+    self._text = tr(text.upper())
     self._rect = rl.Rectangle(0, 0, 0, HEADER_H)
 
   def set_parent_rect(self, parent_rect: rl.Rectangle) -> None:
@@ -84,7 +85,7 @@ def back() -> None:
 
 
 def body(text: str) -> UnifiedLabel:
-  return UnifiedLabel(text, BODY_SIZE)
+  return UnifiedLabel(tr(text), BODY_SIZE)
 
 
 def draw_card(rect: rl.Rectangle, title: str, text: UnifiedLabel | None, buttons: list[Button]) -> rl.Rectangle:
@@ -119,7 +120,7 @@ class SettingRow:
   def __init__(self, setting, title: str | None = None):
     self.setting = setting
     self.kind = setting_kind(setting)
-    title = title or setting.label
+    title = tr(title or setting.label)
     if self.kind == "toggle":
       self.item = toggle_item(title, initial_state=bool(self._value()), callback=self._set, enabled=ui_state.is_offroad)
     elif self.kind == "buttons":
@@ -155,7 +156,7 @@ class ParamToggle:
 
   def __init__(self, title: str, key: str, description: str = "", enabled=True, after=None):
     self.key, self.after = key, after
-    self.item = toggle_item(title, description, ui_state.params.get_bool(key), self._set, enabled=enabled)
+    self.item = toggle_item(tr(title), tr(description), ui_state.params.get_bool(key), self._set, enabled=enabled)
 
   def _set(self, value: bool) -> None:
     ui_state.params.put_bool(self.key, value, block=True)

@@ -1,5 +1,6 @@
 """Home page (native): status block (version, branch, commit, network, car), update banner, and the active offroad alerts
 (alertmanager.set_offroad_alert params), most severe first, re-read every 2 s."""
+from openpilot.system.ui.lib.multilang import tr
 import time
 
 import pyray as rl
@@ -39,11 +40,11 @@ class HomePage(ListPage):
     version, branch, commit = _build()
     self.alerts: list[tuple[int, str]] = []
     self.read_t = 0.0
-    update = ListItem("Update available: install it from Software", action_item=TextAction("UPDATE", color=rl.Color(54, 140, 255, 255)))
+    update = ListItem(tr("Update available: install it from Software"), action_item=TextAction(tr("UPDATE"), color=rl.Color(54, 140, 255, 255)))
     update.set_visible(lambda: ui_state.params.get_bool("UpdateAvailable"))
-    self.add(Header("Status"), text_item("Version", version), text_item("Branch", branch), text_item("Commit", commit),
-             text_item("Network", _network), text_item("Car", _car), update, Header("Alerts"))
-    none = text_item("No alerts", "")
+    self.add(Header(tr("Status")), text_item(tr("Version"), version), text_item(tr("Branch"), branch), text_item(tr("Commit"), commit),
+             text_item(tr("Network"), _network), text_item(tr("Car"), _car), update, Header(tr("Alerts")))
+    none = text_item(tr("No alerts"), "")
     none.set_visible(lambda: not self.alerts)
     self.add(none)
     self.rows = []

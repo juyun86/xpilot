@@ -1,5 +1,6 @@
 """Terms page (native): the text and QR code of mici TermsPage (selfdrive/ui/mici/layouts/onboarding.py). Without callbacks it is
 review only (Device); onboarding passes on_accept and on_decline and gets the accept and decline buttons."""
+from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -25,8 +26,8 @@ class TermsPage(Widget):
     self._qr = QRCodeWidget(URL, QR_SIZE)
     self._buttons = []
     if not review:
-      self._buttons = [Button("decline & uninstall", on_decline, button_style=ButtonStyle.DANGER),
-                       Button("accept terms", on_accept, button_style=ButtonStyle.PRIMARY)]
+      self._buttons = [Button(tr("decline & uninstall"), on_decline, button_style=ButtonStyle.DANGER),
+                       Button(tr("accept terms"), on_accept, button_style=ButtonStyle.PRIMARY)]
       for b in self._buttons:
         b.set_enabled(ui_state.is_offroad)
 

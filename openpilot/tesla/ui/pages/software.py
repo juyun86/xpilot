@@ -1,5 +1,6 @@
 """Software page (native): the rows of mici SoftwareLayoutMici (version, check/download update, install, target branch,
 uninstall), reusing its description parsing and updater signalling. The target branch list is a native sub-page."""
+from openpilot.system.ui.lib.multilang import tr
 import subprocess
 import threading
 import time
@@ -36,7 +37,7 @@ class UpdateChecker:
 
   def press(self, value: str) -> None:
     if not system_time_valid():
-      gui_app.push_widget(alert_dialog("Please connect to Wi-Fi to update."))
+      gui_app.push_widget(alert_dialog(tr("Please connect to Wi-Fi to update.")))
       return
     self.check("SIGHUP" if value == "download update" else "SIGUSR1")
 
@@ -100,17 +101,17 @@ class SoftwarePage(ListPage):
                           enabled=lambda: not ui_state.started and not self.checker.busy())
     check = ListItem(lambda: f"Update: {value()}" if value() else "Check for update", action_item=action,
                      callback=lambda: self.checker.press(value()))
-    install = button_item(lambda: f"Install {self._new_version()}", "INSTALL", callback=lambda: threading.Thread(
+    install = button_item(lambda: f"Install {self._new_version()}", tr("INSTALL"), callback=lambda: threading.Thread(
       target=lambda: params.put_bool("DoReboot", True, block=True), daemon=True).start())
     install.set_visible(lambda: ui_state.is_offroad() and params.get_bool("UpdateAvailable"))
-    branch = button_item("Target branch", lambda: params.get("UpdaterTargetBranch") or "SELECT", callback=self._choose_branch,
+    branch = button_item(tr("Target branch"), lambda: params.get("UpdaterTargetBranch") or "SELECT", callback=self._choose_branch,
                          enabled=ui_state.is_offroad)
     branch.set_visible(not params.get_bool("IsTestedBranch"))
     self.add(
-      text_item("Version", lambda: _current()[0]),
-      text_item("Branch", lambda: _current()[1]),
+      text_item(tr("Version"), lambda: _current()[0]),
+      text_item(tr("Branch"), lambda: _current()[1]),
       check, install, branch,
-      button_item("Uninstall sunnypilot", "UNINSTALL", callback=lambda: confirm("Are you sure you want to uninstall?", "uninstall",
+      button_item(tr("Uninstall sunnypilot"), tr("UNINSTALL"), callback=lambda: confirm(tr("Are you sure you want to uninstall?"), tr("uninstall"),
                                                                                 lambda: params.put_bool("DoUninstall", True, block=True))),
     )
 
@@ -120,7 +121,7 @@ class SoftwarePage(ListPage):
 
   def _choose_branch(self) -> None:
     if not ui_state.params.get("UpdaterAvailableBranches"):
-      gui_app.push_widget(alert_dialog("Failed to get available branches. Ensure you're connected to the internet and try again."))
+      gui_app.push_widget(alert_dialog(tr("Failed to get available branches. Ensure you're connected to the internet and try again.")))
       return
     self.open("Target branch", BranchPage(self._select_branch))
 

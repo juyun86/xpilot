@@ -1,6 +1,7 @@
 """Device page (native): the actions of mici DeviceLayoutMici. Reset calibration, reboot and power off ask in a tici ConfirmDialog
 and are blocked while engaged. Training guide, driver camera, terms and regulatory info open native sub-pages (training.py,
 driver_camera.py, terms.py, regulatory.py); the training guide and driver camera only offroad."""
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.common.hardware import HARDWARE
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.hardware.profile import has_driver_camera
@@ -27,24 +28,24 @@ class DevicePage(ListPage):
     offroad = ui_state.is_offroad
     params = ui_state.params
     guide, camera, terms, regulatory = TrainingGuidePage(on_done=back), DriverCameraPage(), TermsPage(), RegulatoryPage()
-    power_off = button_item("Power off", "POWER OFF", callback=lambda: confirm("Are you sure you want to power off?", "power off",
+    power_off = button_item(tr("Power off"), tr("POWER OFF"), callback=lambda: confirm(tr("Are you sure you want to power off?"), tr("power off"),
                                                                                lambda: params.put_bool("DoShutdown", True, block=True)))
     power_off.set_visible(lambda: not ui_state.ignition)
-    camera_row = button_item("Driver camera preview", "PREVIEW", "Preview the cabin camera to check driver monitoring visibility. The vehicle must be off.",
+    camera_row = button_item(tr("Driver camera preview"), tr("PREVIEW"), "Preview the cabin camera to check driver monitoring visibility. The vehicle must be off.",
                              callback=lambda: offroad() and self.open("driver camera", camera), enabled=offroad)
     camera_row.set_visible(has_driver_camera())  # C3XL has no cabin camera
-    regulatory_row = button_item("Regulatory info", "VIEW", callback=lambda: self.open("regulatory", regulatory))
+    regulatory_row = button_item(tr("Regulatory info"), tr("VIEW"), callback=lambda: self.open("regulatory", regulatory))
     regulatory_row.set_visible(HARDWARE.get_device_type() == "mici")  # mici_fcc.html is the comma four label, wrong on C3/C3X/C3XL
     self.add(
-      text_item("Dongle ID", lambda: params.get("DongleId") or "N/A"),
-      text_item("Serial", lambda: params.get("HardwareSerial") or "N/A"),
-      button_item("Review training guide", "REVIEW", callback=lambda: offroad() and self.open("training guide", guide), enabled=offroad),
+      text_item(tr("Dongle ID"), lambda: params.get("DongleId") or "N/A"),
+      text_item(tr("Serial"), lambda: params.get("HardwareSerial") or "N/A"),
+      button_item(tr("Review training guide"), tr("REVIEW"), callback=lambda: offroad() and self.open("training guide", guide), enabled=offroad),
       camera_row,
-      button_item("Terms & conditions", "VIEW", callback=lambda: self.open("terms", terms)),
+      button_item(tr("Terms & conditions"), tr("VIEW"), callback=lambda: self.open("terms", terms)),
       regulatory_row,
-      button_item("Reset calibration", "RESET", CALIB_DESC,
-                  callback=lambda: confirm("Are you sure you want to reset calibration?", "reset", _reset_calibration)),
-      button_item("Reboot", "REBOOT", callback=lambda: confirm("Are you sure you want to reboot?", "reboot",
+      button_item(tr("Reset calibration"), tr("RESET"), CALIB_DESC,
+                  callback=lambda: confirm(tr("Are you sure you want to reset calibration?"), tr("reset"), _reset_calibration)),
+      button_item(tr("Reboot"), tr("REBOOT"), callback=lambda: confirm(tr("Are you sure you want to reboot?"), tr("reboot"),
                                                                lambda: params.put_bool("DoReboot", True, block=True))),
       power_off,
     )

@@ -35,6 +35,13 @@ class Plugin:
   MANIFEST = None
   SERVICES: tuple[str, ...] = ()  # extra services plannerd, selfdrived and controlsd subscribe for this plugin's hooks
 
+  @classmethod
+  def ui_language(cls) -> dict | None:
+    """UI startup, exclusive role:ui.language. Return code, bundled font path and
+    translations (English message -> localized text). Enable changes apply on UI restart.
+    No persistent LanguageSetting change; disabling restores the user's language."""
+    return None
+
   def __init__(self, CP, params):
     """card: once per car, after fingerprinting. Read Params here or in service_params()."""
     self.CP = CP

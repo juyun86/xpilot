@@ -7,6 +7,7 @@ drawn (viewport() -> None) except during onboarding and for mici pages pushed ab
 regulatory, cabin camera), which show at 3x in FALLBACK_VIEW. Without a viewport every touch maps far outside the mici
 screen, so the mici widgets running underneath never react. tici dialogs (ConfirmDialog, Keyboard) the native pages
 push onto the nav stack are hidden in the mici pass and drawn full-screen here."""
+from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations  # pyray types are functions: rl.Rectangle | None fails at import
 
 from contextlib import contextmanager
@@ -76,9 +77,9 @@ class AddTilesPage(ListPage):
   def __init__(self, entries, pin):
     super().__init__()
     if not entries:
-      self.add(text_item("No tiles to add", "", "Every tile is on the screen."))
+      self.add(text_item(tr("No tiles to add"), "", tr("Every tile is on the screen.")))
     for e in entries:
-      self.add(button_item(e.spec.title, "ADD", callback=lambda tid=e.spec.id: pin(tid)))
+      self.add(button_item(e.spec.title, tr("ADD"), callback=lambda tid=e.spec.id: pin(tid)))
 
   def show_event(self):
     super().show_event()
@@ -487,7 +488,7 @@ class BigScreenHost:
     for name, (x, y, w, h) in tiles.bar_buttons(placed, self._layout == "drive", self._view_position).items():
       active = name == self._layout
       rl.draw_rectangle(x, y, w, h, rl.Color(*Tile.COLOR, 255) if active else rl.Color(72, 75, 88, 255))
-      label = name.capitalize()
+      label = tr(name.capitalize())
       width = measure_text_cached(medium, label, 56).x
       rl.draw_text_ex(medium, label, rl.Vector2(x + (w - width) / 2, y + (h - 56) / 2), 56, 0, rl.WHITE)
 
@@ -634,6 +635,6 @@ class BigScreenHost:
     rl.draw_line_ex(rl.Vector2(cx - 16, cy), rl.Vector2(cx + 16, cy), 4, color)
     rl.draw_line_ex(rl.Vector2(cx - 16, cy), rl.Vector2(cx - 2, cy - 14), 4, color)
     rl.draw_line_ex(rl.Vector2(cx - 16, cy), rl.Vector2(cx - 2, cy + 14), 4, color)
-    rl.draw_text_ex(gui_app.font(FontWeight.SEMI_BOLD), parent.upper(), rl.Vector2(CONTENT[0], 50), 34, 2, DIM)
-    rl.draw_text_ex(gui_app.font(FontWeight.NORMAL), title.lower(), rl.Vector2(CONTENT[0] - 6, 88), 110, 0, rl.WHITE)
+    rl.draw_text_ex(gui_app.font(FontWeight.SEMI_BOLD), tr(parent.upper()), rl.Vector2(CONTENT[0], 50), 34, 2, DIM)
+    rl.draw_text_ex(gui_app.font(FontWeight.NORMAL), tr(title.lower()), rl.Vector2(CONTENT[0] - 6, 88), 110, 0, rl.WHITE)
     rl.draw_line_ex(rl.Vector2(CONTENT[0], TITLE_H - 2), rl.Vector2(CONTENT[0] + CONTENT[2], TITLE_H - 2), 2, rl.Color(255, 255, 255, 30))

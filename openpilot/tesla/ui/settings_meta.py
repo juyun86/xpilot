@@ -1,6 +1,7 @@
 """Settings rows (openpilot.tesla.plugin.Setting) for the upstream Tesla options, plus label helpers shared with the
 Plugins page. Plugin settings live in each plugin's SETTINGS, not here."""
 from openpilot.tesla.plugin import Setting
+from openpilot.system.ui.lib.multilang import tr
 
 VEHICLE_SETTINGS = (
   Setting('TeslaCoopSteering', 'Cooperative Steering'),
@@ -15,11 +16,11 @@ def setting_label(setting: Setting, value, metric: bool = True) -> str:
     unit, divisor = setting.range[3].split('|')[0 if metric else -1], setting.range[4]
     number = f'{value / divisor:.1f}' if divisor != 1 else str(value)
     return number + ('%' if unit == '%' else ' ' + unit)
-  return next((label for label, choice in setting.choices or () if choice == value), str(value))
+  return next((tr(label) for label, choice in setting.choices or () if choice == value), str(value))
 
 
 def setting_choices(setting: Setting, metric: bool = True) -> list[tuple[str, int]]:
   if setting.range is not None:
     minimum, maximum, step = setting.range[:3]
     return [(setting_label(setting, value, metric), value) for value in range(minimum, maximum + 1, step)]
-  return list(setting.choices or ())
+  return [(tr(label), value) for label, value in setting.choices or ()]

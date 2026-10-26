@@ -1,4 +1,5 @@
 """Toggles page (native): the params of mici TogglesLayoutMici with the same enable/visibility conditions."""
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.selfdrive.ui.mici.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import get_speed_options, set_initial_cruise_speed
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -18,21 +19,21 @@ class TogglesPage(ListPage):
     self.personality = multiple_button_item("Following distance", PERSONALITY_DESC,
                                             [p.capitalize() for p in PERSONALITIES], 0, button_width=250, callback=self._set_personality)
     self.personality.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control)
-    self.cruise = ListItem("Initial cruise speed", description="Cruise speed set when cruise is engaged.",
+    self.cruise = ListItem(tr("Initial cruise speed"), description=tr("Cruise speed set when cruise is engaged."),
                            action_item=ButtonAction(self._cruise_text), callback=self._next_cruise_speed)
     self.cruise.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control and not ui_state.CP.pcmCruise)
     not_engaged = lambda: not ui_state.engaged  # noqa: E731
     self.toggles = [
-      ParamToggle("Use metric units", "IsMetric", after=lambda _: self.refresh()),
-      ParamToggle("Lane departure warnings", "IsLdwEnabled",
-                  "Warn when you drift across a detected lane line. Only above 31 mph (50 km/h), with no turn signal."),
-      ParamToggle("Always-on driver monitor", "AlwaysOnDM", "Monitor the driver even when sunnypilot is not engaged."),
-      ParamToggle("Record & upload cabin camera", "RecordFront", "Upload cabin camera data to help improve driver monitoring.",
+      ParamToggle(tr("Use metric units"), "IsMetric", after=lambda _: self.refresh()),
+      ParamToggle(tr("Lane departure warnings"), "IsLdwEnabled",
+                  tr("Warn when you drift across a detected lane line. Only above 31 mph (50 km/h), with no turn signal.")),
+      ParamToggle(tr("Always-on driver monitor"), "AlwaysOnDM", tr("Monitor the driver even when sunnypilot is not engaged.")),
+      ParamToggle(tr("Record & upload cabin camera"), "RecordFront", tr("Upload cabin camera data to help improve driver monitoring."),
                   enabled=False if ui_state.params.get_bool("RecordFrontLock") else not_engaged, after=restart_needed_callback),
-      ParamToggle("Record & upload mic audio", "RecordAudio", "Record microphone audio while driving. Audio is included in dashcam videos.",
+      ParamToggle(tr("Record & upload mic audio"), "RecordAudio", tr("Record microphone audio while driving. Audio is included in dashcam videos."),
                   enabled=not_engaged, after=restart_needed_callback),
-      ParamToggle("Enable sunnypilot", "OpenpilotEnabledToggle",
-                  "Enable to use sunnypilot driver assistance. Disable to use your car's stock driver assistance.",
+      ParamToggle(tr("Enable sunnypilot"), "OpenpilotEnabledToggle",
+                  tr("Enable to use sunnypilot driver assistance. Disable to use your car's stock driver assistance."),
                   enabled=not_engaged, after=restart_needed_callback),
     ]
     self.theme_params = ParamsView(ui_state.params, LAYOUT_SPEC)

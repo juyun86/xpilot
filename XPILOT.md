@@ -10,7 +10,7 @@
 - **主体**：横向、纵向、模型都是 SP 原版，Tesla 车端代码是上游原版。
 - **扩展**：SP 保持主栈，xpilot 通过插件钩子补充行为；可替换部分仅限第 4.3 节列出的 role。
 - **现状（2026-10-23）**：插件扩展经过 `plugin.json` 发现、总开关、资源声明和出错隔离。雷达替换走 `radar_interface` 钩子（第 7 节），地图默认用 SP 的 OSM 进程，声明 `source:map` 的插件开启时让位（第 8 节），插件之间的数据走 `pluginMsg`（8d 节）。
-- **已删除**：其他车型、comma 云、sunnylink、旧的大屏 UI、扭矩车用的横向控制、翻译（UI 只用英文）。
+- **已删除**：其他车型、comma 云、sunnylink、旧的大屏 UI、扭矩车用的横向控制。默认 UI 英文；语言包可通过独立插件提供。
 - **硬件**：C3、C3X、C3XL、C4。大屏设备上整屏是磁贴，行驶时 mici 画面固定在中间、磁贴排在四周（见第 9 节）。
 
 ## 系统版本与硬件镜像
@@ -47,7 +47,7 @@ C3/C3XL 保留各自锁定的 mr-one 引导链和写前白名单校验，禁止�
 10. **按插件拆分**：加功能就是在插件仓库加一个带 `plugin.json` 的插件目录。系统仓库的 `openpilot/tesla/plugins/` 只放核心插件，`manifest_check.py` M12 拒绝新目录。插件自动被发现，没有手写的注册表。插件内部按 5.3 拆分文件（入口 ≤150 行、其他 ≤400 行、只有 `ui.py` 画图），检查强制执行。
 11. **只用声明过的资源**：插件只能使用 `plugin.json` 里 `claims` 声明过的资源；宿主会拒绝未声明的 CAN 发送、钩子和进程。
 12. **车端数据只读、只经插件**：插件在 card 里用 `observe_can` 自己解析，再写进 `carStateSP` 里自己的字段（cereal 规则见第 7 条）；UI 和其他进程只读这些消息，不直接读 CAN。
-13. **UI**：文字只用英文和 ASCII（设备字体没有 `‹ › · —` 等字）；磁贴只读消息、不写参数（设置写在详情页）；`hz` 按需要取最低值。
+13. **UI**：宿主保留英文原文，使用 tr 标记显示文字。语言包通过独占 role:ui.language 和 ui_language hook 提供词条及随包字体，启停后重启界面生效，不修改持久 LanguageSetting；字体测量与绘制保持一致。磁贴只读消息、不写参数（设置写在详情页）；hz 按需要取最低值。
 14. **不加新依赖**：只用标准库和仓库里已有的库。商店插件需要编译的部分以预编译二进制发布（见 8c）。
 15. **推送分流**：插件的改动（`plugins/<id>/`、它的测试、`dist/`、`index.json`）只推到 `onemiless/xpilot-plugins`；系统的改动（宿主、商店、UI、核心插件、panda safety、`safety.json`、检查脚本、文档）只推到 `onemiless/xpilot`。一个功能两边都要改时分成两个提交、两个 PR，先合系统仓库。两个仓库的默认分支都受保护：走 PR，CI 通过才能合并（管理员可以直接推）。
 
@@ -506,3 +506,11 @@ CI（`.github/workflows/xpilot.yaml`）在每个 PR 上跑以上检查（`upstre
 ```
 
 加完后重启会话。safety 的改动必须先编译并跑测试，再上车。
+
+## UI language packs
+
+ui_language returns code, font and translations. The host validates the exclusive claim, supported code,
+bundled font path/header and matching format fields before applying the catalog at UI startup.
+Faults retain the base language; disabling/uninstalling a language plugin takes effect on UI restart.
+Chinese-specific resources live only in xpilot-plugins/plugins/chinese_ui.
+

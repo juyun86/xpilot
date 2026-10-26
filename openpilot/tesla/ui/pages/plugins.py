@@ -3,6 +3,7 @@ load) and the store Refresh button. Right: the selected category's rows: a switc
 description below the title; tapping the row opens its page with settings, info and Update/Remove for downloaded plugins),
 then the store entries not loaded this boot with Install & enable. The index is fetched once on first show (offroad.StoreJobs);
 install and remove apply after a restart. Switching a plugin on switches off its conflicts (offroad.switch_plugin)."""
+from openpilot.system.ui.lib.multilang import tr
 import pyray as rl
 
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -53,7 +54,7 @@ class Switches:
     status = {"": ""}
     action = toggle_item("", initial_state=is_enabled(plugin, ui_state.params), callback=lambda v: self.switch(plugin, v),
                          enabled=lambda: ui_state.is_offroad() and not self.jobs.busy and plugin.ENABLE_PARAM is not None).action_item
-    item = InfoRow(lambda: f"{plugin.TITLE}  [{status['']}]" if status[""] else plugin.TITLE, description, action, on_tap)
+    item = InfoRow(lambda: f"{tr(plugin.TITLE)}  [{tr(status[''])}]" if status[""] else tr(plugin.TITLE), tr(description), action, on_tap)
     self.items.append((plugin, item, status))
     return item
 
@@ -76,14 +77,14 @@ class PluginPage(ListPage):
     super().__init__()
     m = plugin.MANIFEST
     self.switches = Switches(jobs)
-    self.add(self.switches.make(plugin, plugin.DESCRIPTION))
+    self.add(self.switches.make(plugin, tr(plugin.DESCRIPTION)))
     self.rows = [SettingRow(s) for s in plugin.SETTINGS]
     self.add(*[r.item for r in self.rows])
-    self.add(text_item("Source", "store (removable)" if plugin.NAME in jobs.installed else "built-in (switch off only)"),
-             text_item("Version", f"v{m.version}"), text_item("Author", m.author or "unknown"),
-             text_item("Category", CATEGORIES.get(plugin.CATEGORY, plugin.CATEGORY)),
-             text_item("Use", m.use.replace("both", "onroad + offroad")),
-             text_item("Claims", ", ".join(plugin.CLAIMS) or "none"), text_item("Priority", str(plugin.PRIORITY)))
+    self.add(text_item(tr("Source"), "store (removable)" if plugin.NAME in jobs.installed else "built-in (switch off only)"),
+             text_item(tr("Version"), f"v{m.version}"), text_item(tr("Author"), m.author or "unknown"),
+             text_item(tr("Category"), CATEGORIES.get(plugin.CATEGORY, plugin.CATEGORY)),
+             text_item(tr("Use"), m.use.replace("both", "onroad + offroad")),
+             text_item(tr("Claims"), ", ".join(plugin.CLAIMS) or "none"), text_item(tr("Priority"), str(plugin.PRIORITY)))
     pid = plugin.NAME
     if pid in jobs.installed:
       self.add(ListItem(lambda: f"Store: {'working...' if jobs.busy else jobs.status}",
@@ -123,7 +124,7 @@ class PluginsPage(Widget):
     self.sections: list[tuple[str, ListPage]] = []
     if LOAD_ERRORS:
       page = ListPage()
-      page.add(*[ListItem(name, description=error, action_item=TextAction("failed")) for name, error in LOAD_ERRORS.items()])
+      page.add(*[ListItem(name, description=error, action_item=TextAction(tr("failed"))) for name, error in LOAD_ERRORS.items()])
       self.sections.append(("Failed", page))
     for title, plugins, entries in market_sections(jobs.entries):
       page = ListPage()
@@ -140,7 +141,7 @@ class PluginsPage(Widget):
                          callback=lambda e=e: jobs.run(lambda: jobs.act(e.id))))
       self.sections.append((title, page))
     self.selected = max(0, min(self.selected, len(self.sections) - 1))
-    self.buttons = [Button(title, lambda i=i: self._select(i), font_size=44) for i, (title, _) in enumerate(self.sections)]
+    self.buttons = [Button(tr(title), lambda i=i: self._select(i), font_size=44) for i, (title, _) in enumerate(self.sections)]
     for b in self.buttons:
       b.set_rect(rl.Rectangle(0, 0, LEFT_W, CAT_H))
     self.categories = Scroller(self.buttons, spacing=GAP, pad_end=False)  # scrolls when the categories outgrow the column

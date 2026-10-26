@@ -2,6 +2,7 @@
 Terms: accept writes HasAcceptedTerms and HasAcceptedTermsSP, decline asks once more and then writes DoUninstall. Then the training
 guide, which ends by writing CompletedTrainingVersion. on_done is called once, where mici pops the onboarding window.
 hardwared does not go onroad before both are done, so this always runs offroad."""
+from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -40,10 +41,10 @@ class OnboardingPage(Widget):
     self._view = TERMS
     self._terms = TermsPage(on_accept=self._on_terms_accepted, on_decline=lambda: self._set_view(DECLINE))
     self._guide = TrainingGuidePage(on_done=self._on_completed_training)
-    self._decline_text = body("You must accept the Terms of Service to use sunnypilot.\n\n"
-                              "Decline the terms and uninstall sunnypilot from this device?")
-    self._decline_buttons = [Button("back", lambda: self._set_view(TERMS)),
-                             Button("decline & uninstall", self._on_uninstall, button_style=ButtonStyle.DANGER)]
+    self._decline_text = body(tr("You must accept the Terms of Service to use sunnypilot.\n\n"
+                              "Decline the terms and uninstall sunnypilot from this device?"))
+    self._decline_buttons = [Button(tr("back"), lambda: self._set_view(TERMS)),
+                             Button(tr("decline & uninstall"), self._on_uninstall, button_style=ButtonStyle.DANGER)]
 
   def _set_view(self, view: int) -> None:
     if view == GUIDE and self._view != GUIDE:
