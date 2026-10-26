@@ -1,6 +1,8 @@
 # xpilot：规则与开发说明
 
-所有人和所有 AI 动手改代码前必须先读这份文档。`AGENTS.md`（Codex 等）和 `CLAUDE.md`（Claude）都指向这里。
+所有开发者和 AI 动手前，先读 [最高开发规范](DEVELOPMENT_RULES.md)，再读本文硬规则及本次涉及的 API。最高开发规范优先于本文、AGENTS.md、README 和设计说明；不覆盖用户明确指令、系统要求或操作系统权限。
+
+用户仓库为 juyun86/xpilot（xpilot 分支）与 juyun86/xpilot-plugins（main 分支）；onemiless 为上游来源。本文保留的上游历史描述不构成向上游推送授权。
 
 ## 1. 项目是什么
 
@@ -49,7 +51,7 @@ C3/C3XL 保留各自锁定的 mr-one 引导链和写前白名单校验，禁止�
 12. **车端数据只读、只经插件**：插件在 card 里用 `observe_can` 自己解析，再写进 `carStateSP` 里自己的字段（cereal 规则见第 7 条）；UI 和其他进程只读这些消息，不直接读 CAN。
 13. **UI**：宿主保留英文原文，使用 tr 标记显示文字。语言包通过独占 role:ui.language 和 ui_language hook 提供词条及随包字体，启停后重启界面生效，不修改持久 LanguageSetting；字体测量与绘制保持一致。磁贴只读消息、不写参数（设置写在详情页）；hz 按需要取最低值。
 14. **不加新依赖**：只用标准库和仓库里已有的库。商店插件需要编译的部分以预编译二进制发布（见 8c）。
-15. **推送分流**：插件的改动（`plugins/<id>/`、它的测试、`dist/`、`index.json`）只推到 `onemiless/xpilot-plugins`；系统的改动（宿主、商店、UI、核心插件、panda safety、`safety.json`、检查脚本、文档）只推到 `onemiless/xpilot`。一个功能两边都要改时分成两个提交、两个 PR，先合系统仓库。两个仓库的默认分支都受保护：走 PR，CI 通过才能合并（管理员可以直接推）。
+15. **推送分流**：插件的改动（`plugins/<id>/`、它的测试、`dist/`、`index.json`）只推到 `juyun86/xpilot-plugins` 的 main；系统的改动（宿主、商店、UI、核心插件、panda safety、`safety.json`、检查脚本、文档）只推到 `juyun86/xpilot` 的 xpilot。一个功能两边都要改时分开提交和审核，先发布系统仓库。按实际仓库保护规则走 PR/CI；用户明确授权且具备权限时可直接推送，但不免除验证与结果报告。
 
 ## 3. 目录
 

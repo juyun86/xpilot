@@ -1,3 +1,7 @@
+# Xpilot development entry
+
+开发前先读 [Xpilot 最高开发规范](DEVELOPMENT_RULES.md)，再读 [AGENTS.md](AGENTS.md) 和 [插件 API / 开发规则](XPILOT.md)。用户仓库为 juyun86/xpilot 与 juyun86/xpilot-plugins；下方保留 sunnypilot 上游介绍。
+
 ![](https://user-images.githubusercontent.com/47793918/233812617-beab2e71-57b9-479e-8bff-c3931347ca40.png)
 
 ## 🌞 What is sunnypilot?

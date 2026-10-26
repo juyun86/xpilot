@@ -1,1 +1,1 @@
-Read and follow `XPILOT.md` and `AGENTS.md` before changing anything in this repository.
+Read and follow `DEVELOPMENT_RULES.md` first, then `AGENTS.md` and the relevant `XPILOT.md` sections before changing anything in this repository. `DEVELOPMENT_RULES.md` is the highest repository development policy, subject to user instructions, platform requirements and OS permissions.

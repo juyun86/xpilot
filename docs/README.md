@@ -1,6 +1,6 @@
 # xpilot 文档
 
-本目录保留上游资料和 xpilot 扩展说明。当前插件接口、仓库分工及开发规则以 [XPILOT.md](../XPILOT.md) 为入口。
+本目录保留上游资料和 xpilot 扩展说明。先读 [Xpilot 最高开发规范](../DEVELOPMENT_RULES.md)，再按 [XPILOT.md](../XPILOT.md) 查阅相关接口；设计稿不自动等于已实现 API，验证记录不自动等于发布或设备验收通过。
 
 ## 插件 API 与设计
 
