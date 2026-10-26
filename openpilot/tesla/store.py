@@ -31,7 +31,7 @@ from openpilot.common.utils import atomic_write
 from openpilot.tesla import manifest as mf
 from openpilot.tesla.plugin_params import ParamsView, STORE_TYPES
 
-INDEX_URL = "https://raw.githubusercontent.com/onemiless/xpilot-plugins/main/index.json"
+INDEX_URL = "https://raw.githubusercontent.com/juyun86/xpilot-plugins/main/index.json"
 # First boot: display plugins installed once (marker file in INSTALL_DIR, so a removed default stays removed).
 DEFAULTS = ("speed_card", "lead_card", "speed_limit_card", "car_tile", "map_tile", "clock_tile", "ip_tile", "blindspot_edges")
 DEFAULTS_DONE = ".defaults_done"

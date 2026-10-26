@@ -4,7 +4,7 @@
 
 ## Repository
 
-- [ ] This is a system change (host, store, UI, core plugins, panda safety, checks, docs). Plugin changes go to onemiless/xpilot-plugins.
+- [ ] This is a system change (host, store, UI, core plugins, panda safety, checks, docs). Plugin changes go to juyun86/xpilot-plugins.
 
 ## Verification
 
@@ -12,4 +12,4 @@
 - [ ] Build / safety tests / MISRA (only if panda safety or compiled code changed): paste commands, results and the machine below. CI does not run these.
 - [ ] New safety header is `<plugin id>.h`; every TX allowed without `controls_allowed` is in XPILOT.md section 6
 - [ ] Tested on a device (commit on the device: )
-- [ ] Companion pull request in onemiless/xpilot-plugins (link, if any): 
+- [ ] Companion pull request in juyun86/xpilot-plugins (link, if any): 
