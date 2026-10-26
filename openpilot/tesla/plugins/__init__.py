@@ -593,8 +593,11 @@ def apply_long_planner(planners: list, planner, sm) -> None:
 class _GuardedRadar:
   """Reads the plugin radar while the port's RadarInterface runs alongside; if the plugin raises the port's takes over for good."""
 
-  def __init__(self, plugin, sp):
+  def __init__(self, plugin, sp, services=()):
     self.plugin, self.sp, self._plugins = plugin, sp, [plugin]
+    from openpilot.tesla.card_context import CardSubscriptions
+    self._context = CardSubscriptions()
+    self._services = tuple(services)
 
   def __getattr__(self, name):
     return getattr(self.sp, name)
@@ -602,6 +605,14 @@ class _GuardedRadar:
   def update(self, can_list):
     sp_out = self.sp.update(can_list)
     if self._plugins:
+      if hasattr(self.plugin, 'radar_context'):
+        try:
+          context = self._context.poll({self.plugin.plugin_name: self._services})
+          self.plugin.radar_context(context[self.plugin.plugin_name], time.monotonic_ns())
+        except Exception as exc:
+          self._plugins.clear()
+          record_fault(self.plugin.plugin_name, 'card.radar_context', exc)
+          return sp_out
       ok, out = _call(self._plugins, self.plugin, "update", "card.radar_interface", can_list)
       if ok:
         return out
@@ -613,7 +624,10 @@ def radar_interface(CP, CP_SP, params, sp_radar):
   if CP.brand != "tesla":
     return sp_radar
   found = _collect(params, "radar_interface", "source:radar", "card", CP, CP_SP, params)
-  return _GuardedRadar(found[0], sp_radar) if found else sp_radar
+  if not found:
+    return sp_radar
+  services = next((c.SERVICES for c in PLUGINS if c.NAME == found[0].plugin_name), ())
+  return _GuardedRadar(found[0], sp_radar, services)
 
 
 # ---- externald: providers ----

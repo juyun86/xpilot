@@ -34,3 +34,16 @@ Validation: `tools/sp_tesla_e2e/card_context_check.py` uses synthetic snapshots
 for restricted reads, immutable metadata, original time/validity, nonblocking
 polling, frozen subscriptions and dropped consumers. It is not firmware or road
 validation. Cross-process/device acceptance remains separately required.
+
+## Radar receiver context
+
+A provider returned by radar_interface may implement
+`radar_context(context, now_ns)` and declare `requires.hooks: ["radar_context"]`.
+The guard calls it immediately before that provider's update, using only its
+owning Plugin.SERVICES and the same immutable snapshot format. It has a separate
+nonblocking subscription so it does not depend on card controller construction
+or control_sends running. Source context failures are recorded, latch the source
+off and use the original receiver, just like source update failures. Existing
+providers without the callback are unchanged. This lets a receiver mark missing
+motion as temporarily unavailable rather than publishing valid-looking targets.
+`radar_context_check.py` exercises the actual guard with synthetic inputs.
