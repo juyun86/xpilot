@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
+sys.path[:0] = [str(ROOT), str(ROOT / 'opendbc_repo')]
 from openpilot.tesla.plugin import Plugin
 from openpilot.tesla.manifest import HOST_CAPS
 
