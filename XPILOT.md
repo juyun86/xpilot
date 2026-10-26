@@ -448,6 +448,8 @@ X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试�
 
 写一个声明 `source:radar` 的插件，实现 `radar_interface` 钩子（见 4.4）。插件关闭、没有声明或出错时用原车雷达。外接雷达如果需要发送报文，还要声明 `can.tx` 并携带 panda 运行时规则。
 
+雷达运动输入使用范围固定的 [sensor_motion.v1 合同](docs/design/sensor-motion-rule.md)：声明对应的 `requires.rule_types`，宿主只编译两个固定报文，Panda 单独检查数值、频率和接收时效。它不扩大车辆控制权限，也不代表旧固件支持；旧固件拒绝规则时必须停止该功能，不能绕过发送检查。
+
 `opendbc_repo/opendbc/car/car_helpers.py` 里的 `RADAR_PLUGINS` 是旧接口，已不用，保持为空（opendbc 不改）。
 
 ## 8. 地图接口

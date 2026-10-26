@@ -262,6 +262,7 @@ HOST_CAPS = {
             "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "external_provider", "ui_language", "ui_glyphs", "network_vpn", "navigation_ingress"),
   "msg": ("*",),  # pluginMsg transports every valid kind; no payload schema or multi-publisher broker implied.
   "rule_abi": RULE_ABI,
+  "rule_types": ("template_clone.v1", "sensor_motion.v1"),
   "params_abi": 1,  # Read-only legacy aliases; explicit new values always win.
   "native": host_platform(),
 }
@@ -276,14 +277,14 @@ def compatible(manifest, caps) -> tuple[bool, str]:
   if manifest.platform is not None and not all(manifest.platform.get(k) == v for k, v in caps["native"].items()):
     return False, f"built for {manifest.platform}, this device is {caps['native']}"
   requires = manifest.requires
-  if not isinstance(requires, dict) or set(requires) - {"hooks", "msg", "rule_abi", "params_abi", "native"}:
-    return False, "bad requires: expected hooks/msg/rule_abi/params_abi/native object"
-  for key in ("hooks", "msg"):
+  if not isinstance(requires, dict) or set(requires) - {"hooks", "msg", "rule_abi", "rule_types", "params_abi", "native"}:
+    return False, "bad requires: expected hooks/msg/rule_abi/rule_types/params_abi/native object"
+  for key in ("hooks", "msg", "rule_types"):
     names = requires.get(key, [])
     if not isinstance(names, list) or not all(isinstance(n, str) and re.fullmatch(r"[a-z_][a-z0-9_.]*", n) for n in names):
       return False, f"bad requires.{key}: expected names"
     for name in names:
-      if name not in caps[key] and not (key == "msg" and "*" in caps[key]):
+      if name not in caps.get(key, ()) and not (key == "msg" and "*" in caps[key]):
         return False, f"requires {key} {name!r}"
   if "rule_abi" in requires:
     abi = requires["rule_abi"]

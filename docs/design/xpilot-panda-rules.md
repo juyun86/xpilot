@@ -27,6 +27,10 @@ header with total length 16/count 0; CLEAR instead reports committed CRC 0.
 
 ## Rule: template_clone.v1 (type 1)
 
+The closed [sensor_motion.v1 profile (type 2)](sensor-motion-rule.md) uses the
+same table/upload ABI for two radar motion inputs. Its separate fixed-record
+validator and sensing-only controls gate do not change any type-1 semantics.
+
 | Offset | Type | Meaning |
 |---|---|---|
 | 0 | u16 | record length = 84 + 44*field_count + 36*tuple_count |

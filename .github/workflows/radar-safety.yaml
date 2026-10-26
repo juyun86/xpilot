@@ -1,0 +1,75 @@
+name: radar safety and firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [xpilot]
+    paths:
+      - 'opendbc_repo/opendbc/safety/xpilot_rules.h'
+      - 'opendbc_repo/opendbc/safety/tests/test_xpilot_sensor_motion.py'
+      - '.github/workflows/radar-safety.yaml'
+  pull_request:
+    paths:
+      - 'opendbc_repo/opendbc/safety/xpilot_rules.h'
+      - 'opendbc_repo/opendbc/safety/tests/test_xpilot_sensor_motion.py'
+      - '.github/workflows/radar-safety.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/opendbc_repo
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Pinned firmware toolchain
+      run: |
+        pip install cffi numpy pycapnp pytest scons==4.11.1 setuptools pycryptodome pyzmq \
+          comma-deps-gcc-arm-none-eabi==13.2.1.post103 comma-deps-cppcheck==2.21.0.post104
+        mkdir -p /tmp/radar-safety
+        pip freeze > /tmp/radar-safety/environment.txt
+        arm-none-eabi-gcc --version >> /tmp/radar-safety/environment.txt
+        git rev-parse HEAD > /tmp/radar-safety/commit.txt
+    - name: Complete safety suite with UBSan
+      run: |
+        set -o pipefail
+        python -m unittest discover -s opendbc_repo/opendbc/safety/tests 2>&1 | tee /tmp/radar-safety/safety.txt
+    - name: F4 H7 and body builds
+      working-directory: panda
+      run: |
+        set -o pipefail
+        scons -j4 2>&1 | tee /tmp/radar-safety/build.txt
+        arm-none-eabi-size board/obj/*/*.elf | tee /tmp/radar-safety/sizes.txt
+        sha256sum board/obj/*/*.elf board/obj/*/*.bin > /tmp/radar-safety/firmware-sha256.txt
+    - name: Baseline size comparison
+      run: |
+        mkdir -p /tmp/radar-firmware-baseline
+        git archive 5d0baa5c9785046a4a4650bd33f7396179ba97be panda opendbc_repo | tar -x -C /tmp/radar-firmware-baseline
+        cd /tmp/radar-firmware-baseline/panda
+        PYTHONPATH=/tmp/radar-firmware-baseline:/tmp/radar-firmware-baseline/opendbc_repo scons -j4 > /tmp/radar-safety/baseline-build.txt 2>&1
+        arm-none-eabi-size board/obj/*/*.elf > /tmp/radar-safety/baseline-sizes.txt
+        echo 'Source baseline: 5d0baa5c9785046a4a4650bd33f7396179ba97be; archive has no git metadata, embedded version uses unknown.' >> /tmp/radar-safety/baseline-sizes.txt
+    - name: MISRA
+      working-directory: panda
+      run: |
+        set -o pipefail
+        SKIP_BUILD=1 tests/misra/test_misra.sh 2>&1 | tee /tmp/radar-safety/misra.txt
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: radar-safety-${{ github.sha }}
+        path: |
+          /tmp/radar-safety
+          panda/board/obj/**/*.elf
+          panda/board/obj/**/*.bin
+          panda/tests/misra/checkers.txt
+          panda/tests/misra/coverage_table
+        retention-days: 30
