@@ -2,8 +2,8 @@
 attention notice, driver monitoring intro, cabin camera check, data upload choice. The guide writes what the mici steps write
 (IsDriverViewEnabled, RecordFront) and calls on_done after the last step; the caller writes CompletedTrainingVersion if it must.
 Buttons are offroad-only."""
-from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations
+from openpilot.system.ui.lib.multilang import tr
 
 import math
 from collections.abc import Callable

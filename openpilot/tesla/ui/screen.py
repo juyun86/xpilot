@@ -7,8 +7,8 @@ drawn (viewport() -> None) except during onboarding and for mici pages pushed ab
 regulatory, cabin camera), which show at 3x in FALLBACK_VIEW. Without a viewport every touch maps far outside the mici
 screen, so the mici widgets running underneath never react. tici dialogs (ConfirmDialog, Keyboard) the native pages
 push onto the nav stack are hidden in the mici pass and drawn full-screen here."""
-from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations  # pyray types are functions: rl.Rectangle | None fails at import
+from openpilot.system.ui.lib.multilang import tr
 
 from contextlib import contextmanager
 import math

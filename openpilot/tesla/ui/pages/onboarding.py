@@ -2,8 +2,8 @@
 Terms: accept writes HasAcceptedTerms and HasAcceptedTermsSP, decline asks once more and then writes DoUninstall. Then the training
 guide, which ends by writing CompletedTrainingVersion. on_done is called once, where mici pops the onboarding window.
 hardwared does not go onroad before both are done, so this always runs offroad."""
-from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations
+from openpilot.system.ui.lib.multilang import tr
 
 from collections.abc import Callable
 

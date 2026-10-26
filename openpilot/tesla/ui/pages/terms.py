@@ -1,7 +1,7 @@
 """Terms page (native): the text and QR code of mici TermsPage (selfdrive/ui/mici/layouts/onboarding.py). Without callbacks it is
 review only (Device); onboarding passes on_accept and on_decline and gets the accept and decline buttons."""
-from openpilot.system.ui.lib.multilang import tr
 from __future__ import annotations
+from openpilot.system.ui.lib.multilang import tr
 
 from collections.abc import Callable
 
