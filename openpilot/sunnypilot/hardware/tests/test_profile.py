@@ -131,6 +131,7 @@ def test_standard_profile_preserves_raw_panda_type() -> None:
 def test_c3xl_profile_only_resolves_known_internal_types() -> None:
   assert resolve_internal_panda_type(b"\x00", HardwareProfile.C3XL) == b"\x09"
   assert resolve_internal_panda_type(b"\x09", HardwareProfile.C3XL) == b"\x09"
+  assert resolve_internal_panda_type(b"\x06", HardwareProfile.C3XL) == b"\x06"
   with pytest.raises(ValueError):
     resolve_internal_panda_type(b"\x07", HardwareProfile.C3XL)
 

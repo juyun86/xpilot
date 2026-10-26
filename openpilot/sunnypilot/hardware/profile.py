@@ -16,6 +16,7 @@ class HardwareProfile(StrEnum):
 
 
 PANDA_TYPE_UNKNOWN = b"\x00"
+PANDA_TYPE_DOS = b"\x06"
 PANDA_TYPE_TRES = b"\x09"
 
 
@@ -76,6 +77,10 @@ def resolve_internal_panda_type(raw_type: bytes, profile: HardwareProfile | None
   selected_profile = profile or get_hardware_profile()
   if selected_profile != HardwareProfile.C3XL:
     return raw_type
+  # Some C3XL revisions use the F4-based DOS Panda. Keep its physical type
+  # so firmware selection does not mistake it for an H7-based Tres.
+  if raw_type == PANDA_TYPE_DOS:
+    return PANDA_TYPE_DOS
   if raw_type in (PANDA_TYPE_UNKNOWN, PANDA_TYPE_TRES):
     return PANDA_TYPE_TRES
   raise ValueError(f"C3XL internal SPI Panda reported unexpected raw type {raw_type.hex()!r}")
