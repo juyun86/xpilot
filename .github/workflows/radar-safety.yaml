@@ -5,14 +5,16 @@ on:
   push:
     branches: [xpilot]
     paths:
-      - 'opendbc_repo/opendbc/safety/xpilot_rules.h'
-      - 'opendbc_repo/opendbc/safety/tests/test_xpilot_sensor_motion.py'
+      - 'opendbc_repo/opendbc/safety/**'
+      - 'panda/board/**'
+      - 'panda/tests/misra/**'
       - '.github/workflows/radar-safety.yaml'
       - 'panda/SConstruct'
   pull_request:
     paths:
-      - 'opendbc_repo/opendbc/safety/xpilot_rules.h'
-      - 'opendbc_repo/opendbc/safety/tests/test_xpilot_sensor_motion.py'
+      - 'opendbc_repo/opendbc/safety/**'
+      - 'panda/board/**'
+      - 'panda/tests/misra/**'
       - '.github/workflows/radar-safety.yaml'
       - 'panda/SConstruct'
 
