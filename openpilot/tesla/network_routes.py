@@ -57,13 +57,18 @@ def reserve(provider):
     raise RuntimeError('VPN runtime UID is assigned')
   for entry in Path('/proc').iterdir():
     try:
-      if entry.name.isdigit() and entry.stat().st_uid == UID:
+      if (entry.name.isdigit() and entry.stat().st_uid == UID
+          and (entry / 'stat').read_text().rsplit(')', 1)[1].split()[0] != 'Z'):
         raise RuntimeError('VPN runtime UID already has a process')
     except FileNotFoundError:
       pass
   for port in (17890, 17891, 17893):
     for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
       with socket.socket(socket.AF_INET, kind) as probe:
+        # Closed Go listeners can leave TIME_WAIT. This still rejects listeners,
+        # while allowing immediate managed restart after a verified core stop.
+        if kind == socket.SOCK_STREAM:
+          probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         probe.bind(('0.0.0.0', port))
   CONTROL.mkdir(mode=0o700, parents=True, exist_ok=True)
   previous_forward = Path('/proc/sys/net/ipv4/ip_forward').read_text().strip()
