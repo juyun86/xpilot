@@ -27,7 +27,27 @@ class PandaStartupIO:
   def list_internal(self) -> list[str]:
     if HARDWARE.get_device_type() == "tici" and get_hardware_profile() != HardwareProfile.C3XL:
       return Panda.list(usb_only=True)
-    return Panda.spi_list()
+    try:
+      serials = Panda.spi_list()
+    except Exception:
+      serials = []
+    if get_hardware_profile() != HardwareProfile.C3XL:
+      return serials
+    # Some explicitly profiled C3XL installations use an internal DOS over USB.
+    # Read only its hardware type; Panda() would configure CAN on every poll.
+    for serial in Panda.list(usb_only=True):
+      context, handle, _, _ = Panda.usb_connect(serial, claim=False, no_error=True)
+      if handle is None:
+        continue
+      try:
+        if handle.controlRead(0xc0, 0xc1, 0, 0, 64) in Panda.INTERNAL_DEVICES and serial not in serials:
+          serials.append(serial)
+      except Exception:
+        continue
+      finally:
+        handle.close()
+        context.close()
+    return serials
 
   def is_bootstub(self, serial: str) -> bool:
     with Panda(serial) as panda:

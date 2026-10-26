@@ -1,7 +1,29 @@
 from dataclasses import dataclass, field
+from unittest.mock import Mock, patch
 
 from openpilot.sunnypilot.hardware.panda_startup import PandaStartup, PandaStartupResult
 from openpilot.sunnypilot.hardware.profile import HardwareProfile
+
+
+def test_c3xl_detects_usb_internal_without_opening_external_pandas() -> None:
+  from openpilot.sunnypilot.hardware.panda_startup import PandaStartupIO
+  internal, external = Mock(), Mock()
+  internal.controlRead.return_value = b"\x06"
+  external.controlRead.return_value = b"\x07"
+  contexts = [Mock(), Mock()]
+  with patch("openpilot.sunnypilot.hardware.panda_startup.get_hardware_profile", return_value=HardwareProfile.C3XL), \
+       patch("openpilot.sunnypilot.hardware.panda_startup.Panda") as panda:
+    panda.spi_list.side_effect = RuntimeError("SPI unavailable")
+    panda.list.return_value = ["internal", "external"]
+    panda.INTERNAL_DEVICES = (b"\x06", b"\x09", b"\x0a")
+    panda.usb_connect.side_effect = [(contexts[0], internal, "internal", False),
+                                     (contexts[1], external, "external", False)]
+    assert PandaStartupIO().list_internal() == ["internal"]
+    panda.assert_not_called()
+    for handle, context in zip((internal, external), contexts, strict=True):
+      handle.controlWrite.assert_not_called()
+      handle.close.assert_called_once()
+      context.close.assert_called_once()
 
 
 @dataclass
