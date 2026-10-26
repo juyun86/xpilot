@@ -441,6 +441,10 @@ X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试�
 
 ## 7. 雷达接入接口
 
+导航与多型号雷达的职责、现有能力及待补接口见
+[特会开导航与雷达拆分约定](docs/design/tesnav-radar-separation.md)。
+该文档是迁移边界，不代表商店已有各型号驱动或完整导航动作已移植。
+
 写一个声明 `source:radar` 的插件，实现 `radar_interface` 钩子（见 4.4）。插件关闭、没有声明或出错时用原车雷达。外接雷达如果需要发送报文，还要声明 `can.tx` 并携带 panda 运行时规则。
 
 `opendbc_repo/opendbc/car/car_helpers.py` 里的 `RADAR_PLUGINS` 是旧接口，已不用，保持为空（opendbc 不改）。
