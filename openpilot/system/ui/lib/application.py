@@ -302,8 +302,9 @@ class GuiApplication(GuiApplicationExt):
     with self._startup_profile_context():
       if title == "UI":
         from openpilot.common.params import Params
-        from openpilot.tesla.ui.localization import configure
+        from openpilot.tesla.ui.localization import configure, extra_glyphs
         configure(multilang, Params())
+        self._plugin_font_chars = extra_glyphs(Params())
       if host is not None:
         self._width, self._height, self._scale = 536, 240, HOST_TEXTURE_SCALE
         self._scaled_width, self._scaled_height = 536 * HOST_TEXTURE_SCALE, 240 * HOST_TEXTURE_SCALE
@@ -740,6 +741,7 @@ class GuiApplication(GuiApplicationExt):
       if po.is_file():
         chars.update(po.read_text(encoding="utf-8"))
       chars.update(''.join(multilang._translations.values()))
+      chars.update(getattr(self, '_plugin_font_chars', ()))
       codepoints = sorted(map(ord, chars))
       codepoint_buffer = rl.ffi.new("int[]", codepoints)
       with as_file(FONT_DIR) as fspath:

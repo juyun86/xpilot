@@ -8,6 +8,25 @@ def _fields(text):
   return sorted((name, spec, conversion) for _, name, spec, conversion in Formatter().parse(text) if name is not None)
 
 
+def extra_glyphs(params):
+  from openpilot.tesla.plugins import active, record_fault
+  chars = set()
+  for plugin in active(params):
+    if 'ui.glyphs' not in plugin.CLAIMS:
+      continue
+    try:
+      text = plugin.ui_glyphs()
+      if not isinstance(text, str) or len(text) > 16384:
+        raise ValueError('invalid extra glyph text')
+      addition = {c for c in text if c.isprintable()}
+      if len(chars | addition) > 4096:
+        raise ValueError('extra glyph budget exceeded')
+      chars.update(addition)
+    except Exception as exc:
+      record_fault(plugin.NAME, 'ui_glyphs', exc)
+  return chars
+
+
 def configure(multilang, params, plugins=None):
   from openpilot.tesla.plugins import PLUGINS, record_fault, resolve
   active, _ = resolve(params)

@@ -42,6 +42,12 @@ class Plugin:
     No persistent LanguageSetting change; disabling restores the user's language."""
     return None
 
+  @classmethod
+  def ui_glyphs(cls) -> str:
+    """UI startup, shared ui.glyphs claim: extra display characters for an
+    already selected language font. Read local labels only; no network or secrets."""
+    return ""
+
   def __init__(self, CP, params):
     """card: once per car, after fingerprinting. Read Params here or in service_params()."""
     self.CP = CP
