@@ -156,6 +156,8 @@ class CarPlugins:
     self.plugins = []
     self.params = params
     self._gate = None
+    from openpilot.tesla.card_context import CardSubscriptions
+    self._contexts = CardSubscriptions()
     if CP.brand != "tesla":
       return
     from openpilot.tesla.core_host import CardGate
@@ -191,11 +193,13 @@ class CarPlugins:
       rules += own
     self.params.put("XpilotPandaRules", panda_rules.param(panda_rules.encode_rules(rules)), block=True)
 
-  def _sends(self, hook: str, *args) -> list:
+  def _sends(self, hook: str, *args, contexts=None) -> list:
     """Like _each, but every CanData must match one of the plugin's can.tx claims, else the plugin is dropped."""
     out = []
     for p in list(self.plugins):
       try:
+        if contexts is not None and p.NAME in contexts:
+          p.card_context(contexts[p.NAME], args[-1])
         sends = list(getattr(p, hook)(*args))
         allowed = mf.can_tx(p.CLAIMS)
         if bad := [s for s in sends if (s[0], s[2]) not in allowed]:
@@ -214,7 +218,15 @@ class CarPlugins:
     self._each("publish_state", CS_SP)
 
   def control_sends(self, CS, CC, now_ns: int) -> list:
-    return self._sends("control_sends", CS, CC, now_ns)
+    consumers = [p for p in self.plugins if type(p).card_context is not Plugin.card_context]
+    try:
+      contexts = self._contexts.poll({p.NAME: p.SERVICES for p in consumers})
+    except Exception as exc:
+      for p in consumers:
+        self.plugins.remove(p)
+        record_fault(p.NAME, 'card.card_context', exc)
+      contexts = {}
+    return self._sends("control_sends", CS, CC, now_ns, contexts=contexts)
 
   def service_params(self, params) -> None:
     self._each("service_params", view(params))
