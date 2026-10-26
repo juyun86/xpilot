@@ -56,6 +56,14 @@ class Plugin:
     from openpilot.tesla.network import NetworkVPN
     return NetworkVPN(cls.NAME)
 
+  @classmethod
+  def navigation_ingress(cls):
+    """Fixed UDP 4213 LAN receiver; requires the enabled source:navigation owner."""
+    if 'source:navigation' not in cls.CLAIMS:
+      raise PermissionError('navigation_ingress requires source:navigation')
+    from openpilot.tesla.navigation import NavigationIngress
+    return NavigationIngress(cls.NAME)
+
   def __init__(self, CP, params):
     """card: once per car, after fingerprinting. Read Params here or in service_params()."""
     self.CP = CP

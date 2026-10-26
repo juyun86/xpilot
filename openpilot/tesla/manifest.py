@@ -259,7 +259,7 @@ RULE_ABI = 1
 HOST_CAPS = {
   "hooks": ("__init__", "setup", "observe_can", "publish_state", "control_sends", "service_params", "processes",
             "role_processes", "alert_source", "lane_change_policy", "lat_correction", "lat_controller", "long_owner", "long_planner",
-            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "external_provider", "ui_language", "ui_glyphs", "network_vpn"),
+            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "external_provider", "ui_language", "ui_glyphs", "network_vpn", "navigation_ingress"),
   "msg": ("*",),  # pluginMsg transports every valid kind; no payload schema or multi-publisher broker implied.
   "rule_abi": RULE_ABI,
   "params_abi": 1,  # Read-only legacy aliases; explicit new values always win.

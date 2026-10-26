@@ -447,6 +447,27 @@ X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试�
 
 ## 8. 地图接口
 
+### 8.0 手机导航网络入口
+
+`Plugin.navigation_ingress()` 是可探测的宿主能力（`requires.hooks` 必须声明
+`navigation_ingress`）。仅启用且持有独占 `source:navigation` 的插件可调用；与
+`source:map`、`source:plugin_msg` 相互独立，不停用 OSM，不争用 VPN 状态消息。
+接口固定监听非特权 IPv4 UDP 4213，仅接受 RFC1918 来源的 1–8192 字节数据报；
+每来源每秒最多 20 包、全局最多 100 包。`receive()` 最多阻塞 50 ms，返回
+`(body, source_ip)` 或 None；授权失效会关闭 socket 并抛 PermissionError。
+`ack(dict)` 只能向最近 500 ms 内接收的来源回复一次固定 v3 导航确认，字段仅为
+`messageType=navassist_udp_ack`、`schemaVersion=3`、`sessionId`、`sequence`。
+不能指定地址、端口、命令或任意回复正文。端口冲突报错，不抢占已有服务。
+
+此接口不提供 root、路由、DNS、VPN、文件权限、IPv6 或 HTTP 服务，也不认证手机。
+仅用于受控私有局域网。调用者必须在独立的受管进程使用 context manager/close，
+自行实现严格协议、停车建立会话、重放保护、有效期与失效发布；停用、卸载、升级
+结束进程后由 OS 释放端口。claims 是资源协调，不是进程的 OS 沙箱。
+导航发布者使用既有 `navInstruction` 语义；消息过期/退出必须 invalid，消费者还需
+检查单调时间年龄。地图图片与模型输入另按下述合同，不由收到快照自动取得驾驶权限。
+
+验证入口：`tools/sp_tesla_e2e/navigation_ingress_check.py`；该检查不等于手机或道路验收。
+
 - **数据**：任何数据源只发布 `liveMapDataSP`，包括限速、前方限速、路名、`targetVelocities`（弯道目标速度）、`source`。
 - **默认数据源**：SP 的 OSM（`mapd`、`mapd_manager`、`map_osm` 进程）。
 - **新增数据源**：写一个插件，声明 `source:map` 和 `process:<名字>`，用 `processes()` 启动自己的进程发布 `liveMapDataSP`（可以继承 `sunnypilot/mapd/live_map_data/base_map_data.py`）。这个插件开启时，SP 的三个地图进程自动不启动；关掉插件就回到 OSM。
