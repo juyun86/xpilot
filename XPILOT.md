@@ -509,8 +509,9 @@ CI（`.github/workflows/xpilot.yaml`）在每个 PR 上跑以上检查（`upstre
 
 ## UI language packs
 
-ui_language returns code, font and translations. The host validates the exclusive claim, supported code,
-bundled font path/header and matching format fields before applying the catalog at UI startup.
-Faults retain the base language; disabling/uninstalling a language plugin takes effect on UI restart.
-Chinese-specific resources live only in xpilot-plugins/plugins/chinese_ui.
+[完整 API、返回字段、生命周期、校验及示例](docs/design/xpilot-ui-language-api.md)。
+语言角色为独占 role:ui.language，能力探测为 requires.hooks 中的 ui_language。
+首次安装、更新或卸载后完整重启软件；不提供词条热更新。
+校验失败记录故障并保留基础语言，不自动修改插件开关。
+语言插件资源只保存在 xpilot-plugins 的对应插件目录；宿主只保留通用接口和 tr 标记。
 
