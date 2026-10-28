@@ -350,6 +350,12 @@ class MyTile(Tile):
 - 文件超过限制就按职责拆分，不要压缩代码、删注释或合并行来凑行数。
 - 检查：核心插件由 `manifest_check.py` M11 检查（`manifest.layout_problems`）；商店插件在安装时检查，不符合就拒绝安装（`store_check.py` S16）。
 
+### 网络 VPN 与插件字形
+
+`role:network.vpn` 的受管提供方通过 `Plugin.network_vpn()` 请求固定操作；接口只接受 prepare、startcore、stopcore、enable、disable，不接受命令、可执行路径或任意路由参数。资源、停车限制、所有权、故障清理及 IPv4/IPv6 范围见 [受限 VPN 合同](docs/design/xpilot-network-api.md)。连接只允许停车且未接管；离开停车状态后独立看守停止核心并清理本代资源。
+
+`ui.glyphs` 为共享资源，声明并实现 `ui_glyphs` 的已启用插件可在启动时提供受限的显示字形；节点原始身份和值不翻译。宿主限制字符串和字形数量，提供方异常不能使其他界面失效。接口声明不代表操作系统权限或沙箱。
+
 ### 5.4 宿主系统 API（host_api）
 
 插件是受信任的审核代码，`openpilot.tesla.host_api` 是带安全底线的宿主契约，不是沙箱。动作函数的第一个参数都是插件类或实例，宿主用它的 `NAME` 和 `CLAIMS` 检查该插件当前是否 active 且已声明所需 claim；越权会写入 `XpilotPluginFaults`。`None` 表示请求已受理，字符串是拒绝原因，不表示异步动作已经完成。

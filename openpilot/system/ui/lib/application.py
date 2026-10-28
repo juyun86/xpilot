@@ -228,6 +228,7 @@ class GuiApplication(GuiApplicationExt):
 
     self._fonts: dict[FontWeight, rl.Font] = {}
     self._fallback_fonts: dict[str, rl.Font] = {}
+    self._plugin_font_chars: set[str] = set()
     self._width = width if width is not None else GuiApplication._default_width()
     self._height = height if height is not None else GuiApplication._default_height()
 
@@ -733,6 +734,7 @@ class GuiApplication(GuiApplicationExt):
     if language not in self._fallback_fonts:
       chars = set(map(chr, range(32, 127))) | set(EXTRA_FONT_CHARS)
       chars.update(multilang.translation_path(language).read_text(encoding="utf-8"))
+      chars.update(self._plugin_font_chars)
       codepoints = sorted(map(ord, chars))
       codepoint_buffer = rl.ffi.new("int[]", codepoints)
       with as_file(FONT_DIR) as fspath:
@@ -752,7 +754,14 @@ class GuiApplication(GuiApplicationExt):
     return self._height
 
   def _load_fonts(self):
+    try:
+      from openpilot.tesla.ui.glyphs import extra_glyphs
+      self._plugin_font_chars = extra_glyphs()
+    except Exception:
+      cloudlog.exception("Failed to load plugin glyphs")
+      self._plugin_font_chars = set()
     base_chars = set(map(chr, range(32, 127))) | set(EXTRA_FONT_CHARS)
+    base_chars.update(self._plugin_font_chars)
     unifont_chars = set(base_chars)
     for language, code in multilang.languages.items():
       unifont_chars.update(language)

@@ -70,11 +70,12 @@ CLAIM_PATTERNS = (
   r"sound",                            # custom sound through host_api (shared, parked only)
   r"display",                          # display ownership (exclusive)
   r"camera:(road|wide|driver)",         # declarative camera use (shared)
+  r"ui\.glyphs",                         # extra display glyphs from enabled plugins
   r"msg:[a-z][a-z0-9_.]*",              # publish pluginMsg of this kind (shared; source tells publishers apart)
   r"lang:(de|fr|pt-BR|es|tr|uk|th|zh-CHT|zh-CHS|ko|ja)",  # provide this language pack (exclusive)
 )
 SHARED_CLAIMS = {"long.target", "plan.filter", "event.filter", "alert", "lat.correction", "power", "sound",
-                 "camera:road", "camera:wide", "camera:driver"}
+                 "camera:road", "camera:wide", "camera:driver", "ui.glyphs"}
 
 
 def shared(claim: str) -> bool:
@@ -245,7 +246,7 @@ RULE_ABI = 1
 HOST_CAPS = {
   "hooks": ("__init__", "setup", "observe_can", "publish_state", "control_sends", "service_params", "processes",
             "role_processes", "alert_source", "lane_change_policy", "lat_correction", "lat_controller", "long_owner", "long_planner",
-            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface"),
+            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "network_vpn", "ui_glyphs"),
   "msg": ("*",),  # plugin_msgd authenticates/limits publishers; every declared kind, no payload schema.
   "host_api": ("parked", "reboot", "shutdown", "wifi_connect", "wifi_forget", "hotspot", "play_sound", "data_dir"),
   "rule_abi": RULE_ABI,
