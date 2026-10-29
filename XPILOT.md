@@ -64,7 +64,7 @@ openpilot/tesla/
   plugins/sp_engagement/ sp_safety_fallback/   默认接管和安全兜底
   store.py                  插件商店：下载、校验、安装；首次启动自动安装索引标记的默认插件（8c）
   ui/screen.py ui/tile.py ui/tiles.py ui/slots/   大屏磁贴宿主、磁贴基类、布局模型（无 pyray）、内置磁贴（slots/settings.py 设置页磁贴）
-  ui/plugin_ui.py           UI 侧插件加载：找到 Tile、HudOverlay 和 ScreenOverlay，插件关闭时隐藏
+  ui/plugin_ui.py           UI 侧插件加载：找到 Tile、HudOverlay、ScreenOverlay 和 RoadOverlay，插件关闭时隐藏
   ui/plugins_page.py ui/store_page.py   mici 设置里的"Plugins"页和商店页（小屏用）
   ui/offroad.py ui/pages/   大屏停车时的详情页（见第 9 节）
   ui/settings_page.py ui/settings_meta.py        Tesla 设置页（上游 Tesla 选项、DM、地图）
@@ -103,7 +103,7 @@ panda/board/xpilot_rules.h   app EP2 loader
 | `params` | 参数声明，格式见 `gen_params.py`；改完运行 `python3 openpilot/tesla/plugins/gen_params.py` |
 | `rules` | `template_clone.v1` 规则列表，字段与限制见第 6 节合同；can.tx 必须精确匹配。旧 `safety` 字段一律拒绝 |
 | `default` | 可选布尔值；`true` 由商店索引声明为首次启动自动安装包，省略为非默认；不是 enable 开关 |
-| `requires` | 可选能力需求：`{"hooks": ["setup"], "msg": ["lanes.hint"], "rule_abi": 1, "native": {"machine": "aarch64", "python": "cpython-312"}}`；每项可省略 |
+| `requires` | 可选能力需求：`{"hooks": ["setup"], "msg": ["lanes.hint"], "rule_abi": 1, "native": {"machine": "aarch64", "python": "cpython-312"}, "plugins": ["tesla_dynamic_acc"]}`；每项可省略。`plugins` 列出必须先开启的插件 id：任一未开启时打开开关被拒绝，并提示 "turn on first: <插件名>"；只在开关时检查，不连带开启、不影响加载 |
 
 文本设置写成 `{"key": "MyServer", "label": "Server", "type": "text", "max_len": 64}`；秘密设置用 `"type": "secret"`，对应 `params` 必须声明 `"type": "STRING"`。`max_len` 默认 64，只接受 1–256 的整数；不能同时带 range/choices，未知 type 和不合法的 max_len 会拒载。未声明 type 的开关、range、choices 保持原语义。
 
@@ -217,7 +217,7 @@ Host E2E：`PYTHONPATH=tinygrad_repo python3 tools/sp_tesla_e2e/model_source_e2e
 | `plugins.send_msg(plugin, kind, payload, valid_for_ms)`、`plugins.PluginMsgs().fresh(kind)` / `.latest(kind, source)` | 任何插件代码 | 发布和读取 `pluginMsg`（8d 节），每个 `kind` 要声明 `msg:<kind>` |
 | `long_target(CP, params)`（类方法） | plannerd，每个计划周期 | 返回带 `update(sm, v_ego, v_cruise)` 的对象，给出目标车速（m/s）或 None。低于巡航车速：和 SP 自己的限速一样取最小；高于巡航车速：只替换驾驶员设定车速，且只在已接管、没踩油门/刹车、没 override 时生效，多个插件取最低，上限 `V_CRUISE_MAX`。MPC 跟车、模型和 SP 的限速功能仍然取最小，所以加速不会越过它们 |
 | `alert_source(CP, params)`（类方法） | selfdrived，每周期（100 Hz） | 返回带 `update(sm) -> list[PluginAlert]` 的对象。`PluginAlert(severity, title, body)`，severity 为 `info`（无声）、`warning`（提示音）、`critical`（警告音）。插件报警在任何状态都显示，不会让系统退出，优先级最高到 MID，SP 自己的退出和严重报警永远优先。标题最多 60 字符，正文 80 |
-| `lane_change_policy(params)`（类方法） | modeld 的 DesireHelper | 返回带 `allow(carstate, direction, default) -> bool` 的对象，只替换 SP 的"不用推方向盘就开始变道"这一个判断（`default` 是 SP 原来的结果）。打转向灯、最低车速、盲区和路沿检查仍然强制生效 |
+| `lane_change_policy(params)`（类方法） | modeld 的 DesireHelper | 返回带 `allow(carstate, direction, default) -> bool` 的对象，只替换 SP 的"不用推方向盘就开始变道"这一个判断（`default` 是 SP 原来的结果）。打转向灯、最低车速、盲区和路沿检查仍然强制生效（SP #2049 起：驾驶员推方向盘可以越过路沿，盲区始终阻止） |
 | `lat_correction(CP, params)`（类方法） | controlsd，横向生效时每个控制周期 | 返回带 `update(sm, v_ego, curvature) -> 曲率或 None` 的对象。多个修正按优先级串联；总改动不超过 0.5 m/s² 横向加速度对应的曲率（低于 5 m/s 按 5 m/s 算），NaN/inf 被忽略；之后 SP 的 `clip_curvature`（ISO 加加速度和加速度限制）照常生效 |
 | `lat_controller(CP, CP_SP, CI, params)`（类方法） | controlsd | 返回和 `LatControl` 接口一致的对象（`update(...) -> (steer, 转角, lac_log)`、`reset()`），替换 SP 的横向控制器。输出不和 SP 比较、不额外限制，只靠车端转角速率限制和 panda 兜底。SP 的控制器一直并行运行；插件出错或输出 NaN/inf 时，本次运行剩下的时间都改用 SP 的输出 |
 | `long_owner(CP, CP_SP, params)`（类方法） | controlsd | 可选独占 `role:long.owner`，返回带 `desired(ctx, CS) -> None / "stock" / "sp"` 的对象。只提议 owner，所有 host veto 和 Panda health 确认仍生效；构造/调用异常、非法返回值记录故障并停用本行程，不自动提升落败插件；None 保持 owner。collector/context/手动脉冲合同见 [host design](docs/design/xpilot-long-owner-host.md) |
@@ -321,6 +321,7 @@ class MyTile(Tile):
 | `ui.tiles.TileSpec` | `id, title, sizes, services, show, hz, order`（见第 9 节） | 磁贴声明 |
 | `ui.plugin_ui.ScreenOverlay` | `update(sm)`、`draw(zones)` | 大屏行驶时的整屏叠加层 |
 | `ui.plugin_ui.HudOverlay` | Widget：`update()`、`render(rect)`；读 `ui_state.sm` | mici 行驶画面叠加层 |
+| `ui.plugin_ui.RoadOverlay` | `update(sm)`、`draw(road)`；`road.lane_points()`、`road.polygon(points, half_width)`、`road.rect` | mici 路面上的叠加层（画在轨迹线之后，未接管时不画） |
 
 **消息**（插件可以读或发布）：`carStateSP` 里插件自己的字段（例 `teslaBattery`）、`liveMapDataSP` 和 `navInstruction`（地图和导航，第 8 节）、`pluginMsg`（插件通信，8d），以及 SP 的所有服务（`carState`、`radarState`、`longitudinalPlan`、`deviceState` 等）。
 
