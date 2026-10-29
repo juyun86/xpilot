@@ -35,6 +35,14 @@ class Plugin:
   MANIFEST = None
   SERVICES: tuple[str, ...] = ()  # extra services plannerd, selfdrived and controlsd subscribe for this plugin's hooks
 
+  @classmethod
+  def navigation_ingress(cls):
+    """Fixed UDP LAN receiver for the active navigation owner."""
+    if 'source:navigation' not in cls.CLAIMS:
+      raise PermissionError('navigation_ingress requires source:navigation')
+    from openpilot.tesla.navigation import NavigationIngress
+    return NavigationIngress(cls.NAME)
+
   def __init__(self, CP, params):
     """card: once per car, after fingerprinting. Read Params here or in service_params()."""
     self.CP = CP

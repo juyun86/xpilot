@@ -1,5 +1,5 @@
 """Plugin manifests (plugin.json), categories, claims and conflict resolution. Stdlib only: the UI, gen_params.py and
-the checks read manifests without importing plugin code. Format and rules: XPILOT.md "插件清单".
+the checks read manifests without importing plugin code. Format and rules: XPILOT.md "鎻掍欢娓呭崟".
 
 plugin.json:
   id           directory name                     name, description, author, version   shown on the Plugins page
@@ -272,7 +272,7 @@ RULE_ABI = 1
 HOST_CAPS = {
   "hooks": ("__init__", "setup", "observe_can", "publish_state", "control_sends", "service_params", "processes",
             "role_processes", "alert_source", "lane_change_policy", "lat_correction", "lat_controller", "long_owner", "long_planner",
-            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface"),
+            "long_target", "plan_filter", "event_filter", "engagement", "safety_fallback", "radar_interface", "navigation_ingress"),
   "msg": ("*",),  # plugin_msgd authenticates/limits publishers; every declared kind, no payload schema.
   "host_api": ("parked", "reboot", "shutdown", "wifi_connect", "wifi_forget", "hotspot", "play_sound", "data_dir"),
   "rule_abi": RULE_ABI,
