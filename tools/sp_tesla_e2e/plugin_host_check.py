@@ -60,8 +60,10 @@ Run from the repo root with the openpilot python env. Native-only modules (Param
 - P50 an active role:stock.ap holder does not set TeslaSafetyFlagsSP.STOCK_AP in CP_SP.safetyParam, the bit is set
      without a holder, or other bits change
 - P49 long.owner constructor/desired raises, returns a bad value, runs again after fault or restart, or loses exclusivity
-- P50 four-finger edge: off/old ABI/disengaged/held/stale/wrong-bus/malformed input toggles; 3/5 fingers or wipers toggle; MADS 3-finger collides
+- P50b MADS screen button fires on a finger count other than the configured one (the four-finger long-owner toggle moved to
+      tesla_dynamic_acc, owner 2026-10-28)
 - P51 shadow logs non-SP/old ABI/stale/wrong bus/malformed CAN or exceeds 25 Hz; OEM endpoints/counter or SP accel are lost
+- P52 a plugin whose requires.plugins dependency is off switches on, or the refusal hides the dependency's title
 """
 import ast
 import json
@@ -291,6 +293,7 @@ def main() -> int:
   errors += registration_checks(plugins_mod)
   errors += service_checks(plugins_mod)
   errors += required_role_checks(plugins_mod, real)
+  errors += requires_plugins_checks(plugins_mod, real)
   errors += capability_checks(plugins_mod, real)
   errors += rule_checks(plugins_mod)
   errors += long_owner_checks(plugins_mod)
@@ -313,8 +316,6 @@ def long_owner_checks(plugins):
   def can(address, data, bus, ms):
     batch.append(types.SimpleNamespace(logMonoTime=ms * 1_000_000,
       can=[types.SimpleNamespace(address=address, dat=data, src=bus)]))
-  def touch(value, ms):
-    can(0x3DF, bytes([0, 0, 0, value, 0, 0, 0, 0]), 1, ms)
   class Params(FakeParams):
     def put(self, key, value, block=False):
       self.values[key] = value
@@ -355,42 +356,9 @@ def long_owner_checks(plugins):
       with patch.object(plugins, 'PLUGINS', classes):
         assert plugins.long_owner_policy(params, CP, None)(ctx, cs) is None, 'P49 collection'
     with patch.object(plugins, 'PLUGINS', ()):
-      params = Params({'XpLongOwnerManual': True})
-      policy = plugins.long_owner_policy(params, CP, None)
-      outputs = []
-      for value in (0, 4, 4, 5, 4, 0, 4):
-        touch(value, 100)
-        outputs.append(policy(ctx, cs))
-      assert outputs == [None, 'sp', None, None, 'sp', None, 'sp'], ('P50 press', outputs)
-      ctx.owner = 'sp'
-      touch(0, 100)
-      policy(ctx, cs)
-      touch(4, 100)
-      assert policy(ctx, cs) == 'stock', 'P50 reverse'
-      for available, enabled, on in ((False, True, True), (True, False, True), (True, True, False)):
-        ctx.available, ctx.enabled = available, enabled
-        params = Params({'XpLongOwnerManual': on})
-        policy = plugins.long_owner_policy(params, CP, None)
-        for value in (0, 4, 4, 0):
-          touch(value, 100)
-          assert policy(ctx, cs) is None, 'P50 gate'
+      params = Params()
       ctx.available, ctx.enabled, ctx.owner = True, True, 'stock'
-      params = Params({'XpLongOwnerManual': True})
       policy = plugins.long_owner_policy(params, CP, None)
-      touch(4, 100)
-      assert policy(ctx, cs) is None, 'P50 initial held'
-      for address, data, bus, ms in ((0x3DF, bytes([0, 0, 0, 0, 0, 0, 0, 0]), 0, 100),
-          (0x3DF, b'bad', 1, 100), (0x3DF, bytes(8), 1, -1),
-          (0x249, (1 << 14).to_bytes(3, 'little'), 0, 100)):
-        can(address, data, bus, ms)
-        assert policy(ctx, cs) is None, 'P50 invalid/wiper'
-      touch(4, 100)
-      assert policy(ctx, cs) is None, 'P50 invalid input must not rearm'
-      for value in (3, 5, 0):
-        touch(value, 100)
-        assert policy(ctx, cs) is None, 'P50 exact four fingers'
-      touch(4, 100)
-      assert policy(ctx, cs) == 'sp', 'P50 rising edge after other counts'
       from opendbc.car import Bus, structs
       from opendbc.sunnypilot.car.tesla.carstate_ext import CarStateExt
       from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
@@ -404,7 +372,7 @@ def long_owner_checks(plugins):
         parsers[Bus.adas].vl['UI_status2']['UI_activeTouchPoints'] = value
         state, state_sp = structs.CarState(), structs.CarStateSP()
         ext.update(state, state_sp, parsers)
-        assert any(e.pressed and e.type == structs.CarState.ButtonEvent.Type.lkas for e in state.buttonEvents) == (value == 3), 'P50 MADS exact count'
+        assert any(e.pressed and e.type == structs.CarState.ButtonEvent.Type.lkas for e in state.buttonEvents) == (value == 3), 'P50b MADS exact count'
 
       logs = []
       with patch.object(long_owner.cloudlog, 'event', side_effect=lambda name, **kw: logs.append((name, kw))), \
@@ -429,7 +397,7 @@ def long_owner_checks(plugins):
         can(0x2B9, raw.to_bytes(8, 'little'), 2, 0)
         policy(ctx, cs)
         assert len(logs) == 25, 'P51 stale'
-      (ARTIFACTS / 'long-owner.json').write_text(json.dumps({'manual': outputs, 'shadow': logs}, indent=2))
+      (ARTIFACTS / 'long-owner.json').write_text(json.dumps({'shadow': logs}, indent=2))
     assert plugins.long_owner_policy(params, types.SimpleNamespace(brand='toyota'), None) is None, 'P49 non Tesla'
   return []
 
@@ -650,6 +618,31 @@ def required_role_checks(plugins, real) -> list[str]:
   return errors
 
 
+def requires_plugins_checks(plugins, real) -> list[str]:
+  import dataclasses
+  from openpilot.tesla import manifest as mf
+  from openpilot.tesla.ui import offroad
+
+  class Params(FakeParams):
+    put_bool = put = lambda self, key, value, block=False: self.values.__setitem__(key, value)
+
+  m = dataclasses.replace(real[0].MANIFEST, requires={"plugins": ["base"]})
+  if not mf.compatible(m, mf.HOST_CAPS)[0] or mf.compatible(dataclasses.replace(m, requires={"plugins": ["Bad-Id"]}), mf.HOST_CAPS)[0]:
+    return ["P52 compatible() mishandles requires.plugins"]
+  base = type("Base", (Plugin,), {"NAME": "base", "TITLE": "Base ACC", "ENABLE_PARAM": "BaseOn"})
+  dep = type("Dep", (Plugin,), {"NAME": "dep", "ENABLE_PARAM": "DepOn", "MANIFEST": m})
+  errors = []
+  with patch.object(plugins, "PLUGINS", (base, dep)), patch.object(offroad, "PLUGINS", (base, dep)):
+    p = Params()
+    error = offroad.switch_plugin(dep, True, p)
+    if error != "turn on first: Base ACC" or p.values:
+      errors.append(f"P52 dependency off: error={error!r}, writes={p.values}")
+    p = Params({"BaseOn": True})
+    if offroad.switch_plugin(dep, True, p) or not p.get_bool("DepOn"):
+      errors.append("P52 dependency on: switch refused")
+  return errors
+
+
 def switch_ui_checks(plugin, p, offroad) -> list[str]:
   """Run both UI callbacks and refresh methods without raylib or a device."""
   errors = []
@@ -666,7 +659,7 @@ def switch_ui_checks(plugin, p, offroad) -> list[str]:
     env = {"Base": type("Base", (), {"show_event": lambda self: None}),
            "ui_state": types.SimpleNamespace(is_offroad=lambda: True, params=p), "params": lambda: p,
            **{n: getattr(plugins, n) for n in ("view", "is_enabled", "resolve", "FAULTS_PARAM")},
-           "switch_plugin": offroad.switch_plugin, "plugin_status": offroad.plugin_status}
+           "switch_plugin": offroad.switch_plugin, "plugin_status": offroad.plugin_status, "editable": lambda: True}
     exec(compile(ast.fix_missing_locations(tree), path, "exec"), env)
     ui = env[name]()
     ui.items, ui.rows, ui.errors = [(plugin, types.SimpleNamespace(action_item=toggle), status)], [(plugin, toggle)], {}

@@ -28,7 +28,11 @@ Failure cases listed before implementation:
 - O15 secret label leaks content/length, empty secret lacks Not set, or new paths contain logging/fault output
 - O16 either settings page omits the text editor or its offroad entry/commit gates (GPU case 28 exercises both)
 - O17 existing BOOL/range/choices row kinds or labels change
-- O18 manual owner setting is absent, not BOOL/default-off, or either UI bypasses the offroad setting gate
+- O18 the core XpLongOwnerManual key or settings row is still present (moved to tesla_dynamic_acc, owner 2026-10-28)
+- O22 a plugin's main category does not follow its claims (control role > CAN > data > alert > tile, language apart),
+     the author's category field still decides it, or a store entry gets a different category than the same plugin loaded
+- O21 plugin switches and plugin/vehicle settings are not editable while started in P and not engaged, or are editable
+     while engaged or out of P (owner 2026-10-28: P with ignition on showed every switch disabled)
 - O20 a numeric (range) setting has no -/+ stepper on either settings page, a step leaves [min, max] or the step grid,
      or an off-grid/unknown stored value does not snap back into range
 - O19 plugin notifications lose their source, severity clamp or 80-character limit, malformed input leaks through,
@@ -220,7 +224,7 @@ def check_market(errors: list) -> None:
   if any(t != mf.CATEGORIES[p.CATEGORY] for (t, _), p in zip(plugins, [p for _, ps, _ in sections for p in ps], strict=True)):
     errors.append("O12 a plugin in the wrong market category")
   found = {e.id: t for t, _, es in sections for e in es}
-  if found != {"ext_new": mf.CATEGORIES["alerts"], "ext_odd": mf.CATEGORIES["tools"]}:
+  if found != {"ext_new": mf.CATEGORIES["alerts"], "ext_odd": mf.CATEGORIES["data"]}:
     errors.append(f"O12 market store entries: {found}")
 
 
@@ -366,22 +370,51 @@ def check_stepper(errors: list) -> None:
       errors.append("O20 no -/+ stepper in " + name)
 
 
+def check_categories(errors: list) -> None:
+  from unittest.mock import patch
+  cases = ((["role:stock.ap", "role:engagement.state", "can.tx:0x249:1"], "modes"), (["role:perception.model", "long.target"], "models"),
+           (["role:lateral.controller", "event.filter"], "lateral"), (["role:long.owner"], "longitudinal"),
+           (["plan.filter", "process:x", "msg:a.b"], "longitudinal"), (["can.tx:0x3FD:1", "msg:a.b"], "car_actions"),
+           (["msg:bms.state"], "data"), (["process:x", "msg:a.b"], "data"), (["alert"], "alerts"), (["alert", "msg:a.b"], "data"),
+           ([], "ui"), (["lang:zh-CHS"], "language"), (["power"], "data"))
+  for claims, want in cases:
+    if mf.category_of(claims) != want:
+      errors.append(f"O22 category_of({claims}) = {mf.category_of(claims)} != {want}")
+  for p in PLUGINS:
+    if p.CATEGORY != mf.category_of(p.CLAIMS):
+      errors.append(f"O22 {p.NAME} category {p.CATEGORY} not derived from claims")
+  raw = {"id": "x", "name": "x", "version": "1", "api": mf.API_VERSION, "author": "a", "description": "d", "url": "u", "sha256": "0" * 64}
+  doc = {"plugins": [raw | {"id": "a", "category": "ui", "claims": ["role:long.owner"]}, raw | {"id": "b", "category": "body_comfort"},
+                     raw | {"id": "c", "category": "nonsense"},
+                     raw | {"id": "d", "category": "ui", "claims": [1, None]}]}
+  with patch.object(store, "_get", return_value=json.dumps(doc).encode()):
+    got = {e.id: e.category for e in store.fetch_index("u")[0]}
+  if got != {"a": "longitudinal", "b": "car_actions", "c": "data", "d": "ui"}:
+    errors.append(f"O22 store index categories {got}")
+
+
+def check_parked_edits(errors: list) -> None:
+  for started, gear, engaged, want in ((False, 'drive', False, True), (True, 'park', False, True), (True, 'park', True, False),
+                                       (True, 'drive', False, False), (True, 'reverse', False, False)):
+    state = types.SimpleNamespace(is_offroad=lambda s=started: not s, engaged=engaged, sm={'carState': types.SimpleNamespace(gearShifter=gear)})
+    if offroad.editable(state) != want:
+      errors.append(f"O21 editable started={started} gear={gear} engaged={engaged} != {want}")
+  for name in ("tesla/ui/pages/plugins.py", "tesla/ui/plugins_page.py", "tesla/ui/pages/base.py", "tesla/ui/settings_page.py"):
+    if "editable" not in (PKG / name).read_text():
+      errors.append("O21 parked gate missing in " + name)
+
+
 def check_long_owner(errors):
+  """O18: the manual long-owner toggle moved to tesla_dynamic_acc (owner 2026-10-28); no core key or settings row remains."""
   from openpilot.tesla.ui.settings_meta import VEHICLE_SETTINGS
-  setting = next(s for s in VEHICLE_SETTINGS if s.key == 'XpLongOwnerManual')
-  assert offroad.setting_kind(setting) == 'toggle', 'O18 setting kind'
-  keys = (ROOT / 'openpilot/common/params_keys.h').read_text()
-  assert re.search(r'\{"XpLongOwnerManual", \{PERSISTENT \| BACKUP, BOOL, "0"\}\}', keys), 'O18 BOOL/default'
-  for path in ('settings_page.py', 'pages/tesla.py'):
-    assert 'VEHICLE_SETTINGS' in (PKG / 'tesla/ui' / path).read_text(), 'O18 shared settings'
-  assert 'if ui_state.is_offroad():' in (PKG / 'tesla/ui/settings_page.py').read_text(), 'O18 mici gate'
-  assert 'if ui_state.is_offroad():' in (PKG / 'tesla/ui/pages/base.py').read_text(), 'O18 native gate'
+  assert all(s.key != 'XpLongOwnerManual' for s in VEHICLE_SETTINGS), 'O18 core manual row'
+  assert 'XpLongOwnerManual' not in (ROOT / 'openpilot/common/params_keys.h').read_text(), 'O18 core manual key'
 
 
 def main() -> int:
   errors: list[str] = []
   for check in (check_tiles, check_pages, check_plugins, check_store, check_market, check_models, check_view, check_alerts,
-                check_sources, check_text_settings, check_stepper, check_long_owner):
+                check_sources, check_text_settings, check_stepper, check_parked_edits, check_categories, check_long_owner):
     try:
       check(errors)
     except Exception as e:

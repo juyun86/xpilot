@@ -64,7 +64,7 @@ openpilot/tesla/
   plugins/sp_engagement/ sp_safety_fallback/   默认接管和安全兜底
   store.py                  插件商店：下载、校验、安装；首次启动自动安装索引标记的默认插件（8c）
   ui/screen.py ui/tile.py ui/tiles.py ui/slots/   大屏磁贴宿主、磁贴基类、布局模型（无 pyray）、内置磁贴（slots/settings.py 设置页磁贴）
-  ui/plugin_ui.py           UI 侧插件加载：找到 Tile、HudOverlay 和 ScreenOverlay，插件关闭时隐藏
+  ui/plugin_ui.py           UI 侧插件加载：找到 Tile、HudOverlay、ScreenOverlay 和 RoadOverlay，插件关闭时隐藏
   ui/plugins_page.py ui/store_page.py   mici 设置里的"Plugins"页和商店页（小屏用）
   ui/offroad.py ui/pages/   大屏停车时的详情页（见第 9 节）
   ui/settings_page.py ui/settings_meta.py        Tesla 设置页（上游 Tesla 选项、DM、地图）
@@ -93,7 +93,7 @@ panda/board/xpilot_rules.h   app EP2 loader
 |---|---|
 | `id` | 必须和目录名一致 |
 | `api` | 插件面向的宿主接口版本，必须等于 `manifest.API_VERSION`（现在是 1），否则不加载 |
-| `category` | 类别，见下表 |
+| `category` | 链路环节，必须是 `manifest.STAGES` 之一（见 4.2）；只决定钩子执行顺序，不决定显示分类 |
 | `use` | 必填：`onroad`、`offroad` 或 `both`；表示使用场景，Plugins 页显示。缺失或无效时带原因跳过。不改变钩子运行条件 |
 | `entry` | 插件包内的 `模块:类名` |
 | `priority` | 数字越小越优先：争同一个独占资源时它赢；同类插件的执行顺序也按它，数字相同按 id |
@@ -103,7 +103,7 @@ panda/board/xpilot_rules.h   app EP2 loader
 | `params` | 参数声明，格式见 `gen_params.py`；改完运行 `python3 openpilot/tesla/plugins/gen_params.py` |
 | `rules` | `template_clone.v1` 规则列表，字段与限制见第 6 节合同；can.tx 必须精确匹配。旧 `safety` 字段一律拒绝 |
 | `default` | 可选布尔值；`true` 由商店索引声明为首次启动自动安装包，省略为非默认；不是 enable 开关 |
-| `requires` | 可选能力需求：`{"hooks": ["setup"], "msg": ["lanes.hint"], "rule_abi": 1, "native": {"machine": "aarch64", "python": "cpython-312"}}`；每项可省略 |
+| `requires` | 可选能力需求：`{"hooks": ["setup"], "msg": ["lanes.hint"], "rule_abi": 1, "native": {"machine": "aarch64", "python": "cpython-312"}, "plugins": ["tesla_dynamic_acc"]}`；每项可省略。`plugins` 列出必须先开启的插件 id：任一未开启时打开开关被拒绝，并提示 "turn on first: <插件名>"；只在开关时检查，不连带开启、不影响加载 |
 
 文本设置写成 `{"key": "MyServer", "label": "Server", "type": "text", "max_len": 64}`；秘密设置用 `"type": "secret"`，对应 `params` 必须声明 `"type": "STRING"`。`max_len` 默认 64，只接受 1–256 的整数；不能同时带 range/choices，未知 type 和不合法的 max_len 会拒载。未声明 type 的开关、range、choices 保持原语义。
 
@@ -119,36 +119,29 @@ panda/board/xpilot_rules.h   app EP2 loader
 
 card 每次启动用 `cloudlog.event("xpilot.drive_snapshot", ...)` 记录本行程的 system commit、active winners 的 id/version/sha256，以及存在时 `XpilotPandaRules` 的 `crc32`。插件 sha256 在发现时固定，按相对路径排序，对每个普通文件依次哈希 `路径 UTF-8 + NUL + 8 字节大端长度 + 内容`，排除 `__pycache__` 和 `.pyc`；它是内容摘要，不是商店压缩包摘要。快照不会证明 Panda 已加载或设备已部署。
 
-### 4.2 类别（`manifest.CATEGORIES`，按控制链路顺序）
+### 4.2 主分类（`manifest.CATEGORIES`，由 claims 自动算出）
 
-能力状态：**仅分类**表示目前只用于分组；**可补充**表示已有钩子可添加行为；**可替换**表示已有 role 可整体替换对应 SP 环节。类别本身不授予能力，具体以第 4.3、4.4 节的 claims 和钩子为准。
+插件市场和 Plugins 页按主分类分组（2026-10-28 起）。宿主用 `manifest.category_of(claims)` 算分类，作者在 `plugin.json` 填的 `category` 不参与显示分类。插件同时声明多种资源时，按下表从上往下取第一条匹配：
 
-| 类别 | 用途 | 当前能力 |
+| 顺序 | 分类 | 判定依据（claims） |
 |---|---|---|
-| `perception_model` | 感知模型 | 可替换：`role:perception.model` |
-| `object_fusion` | 前车和目标融合 | 仅分类 |
-| `vehicle_params` | 标定和车辆参数 | 仅分类 |
-| `engagement` | 接管状态机 | 可替换：`role:engagement.state` |
-| `driver_monitoring` | 驾驶员监控 | 仅分类 |
-| `lateral_planning` | 横向规划 | 可补充：`lat_correction` |
-| `longitudinal_planning` | 纵向规划 | 可补充：`long_target`、`plan_filter`；规划替换限 `role:long.planner` |
-| `lane_change` | 变道 | 可补充：`lane_change_policy`，限免推方向盘判断 |
-| `navigation` | 导航驾驶 | 可补充：`source:map` + `processes()` 发布地图和导航数据 |
-| `controller` | 控制器 | 可补充：`lat_correction`；横向控制器替换限 `role:lateral.controller` |
-| `actuation` | 执行和车端报文 | 可补充：`control_sends`，受 panda safety 限制 |
-| `safety_fallback` | 安全兜底和 Autopilot 交接 | 可替换：`role:safety.fallback`（Autopilot 交接还没做） |
-| `data_source` | 数据源和外接算力 | 可补充：`observe_can`、`radar_interface`、`processes` + `pluginMsg` |
-| `alerts` | 报警 | 可补充：`alert_source` |
-| `body_comfort` | 车身和舒适 | 可补充：`observe_can`、`control_sends` |
-| `ui` | 磁贴 | 可补充：`Tile` |
-| `overlays` | 行驶叠加层 | 可补充：`HudOverlay`、`ScreenOverlay` |
-| `tools` | 工具和诊断 | 可补充：`processes()` |
+| 1 | `modes` 驾驶模式 | `role:engagement.state`、`role:stock.ap`、`role:safety.fallback` |
+| 2 | `models` 模型 | `role:perception.model` |
+| 3 | `lateral` 横向控制 | `role:lateral.controller`、`lat.correction`、`role:lane_change.policy` |
+| 4 | `longitudinal` 纵向控制 | `role:long.owner`、`role:long.planner`、`plan.filter`、`long.target` |
+| 5 | `car_actions` 车辆动作（CAN） | `can.tx:*` |
+| 6 | `alerts` 提醒 | 只有 `alert`（可再带 `lang:*`）时归此类；带其他资源时跳过此行继续往下匹配 |
+| 7 | `language` 语言 | `lang:*` |
+| 8 | `data` 数据与系统 | 以上都不匹配的其他 claim（`process:*`、`msg:*`、`source:*`、`power`、`net.wifi` 等） |
+| 9 | `ui` 磁贴与叠加层 | 没有任何 claim |
 
-仅分类的类别仍可使用通用钩子（`processes`、`alert_source` 等），但不能替换 SP 的对应环节。真有插件需要时再加专用钩子，不预先加。
+商店索引条目带 `claims` 时用同一函数算分类；没有 `claims`（或 claims 不是字符串列表）的旧索引按 `manifest.LEGACY_CATEGORIES` 把旧 `category` 近似映射过来，未知值归 `data`；这只影响未安装条目的显示，安装后按 claims 重算。分类只用于显示，不授予能力，能力以第 4.3、4.4 节的 claims 和钩子为准。
+
+**链路环节**（`manifest.STAGES`，`plugin.json` 的 `category` 字段，按控制链路顺序）：`perception_model`、`object_fusion`、`vehicle_params`、`engagement`、`driver_monitoring`、`lateral_planning`、`longitudinal_planning`、`lane_change`、`navigation`、`controller`、`actuation`、`safety_fallback`、`data_source`、`alerts`、`body_comfort`、`ui`、`overlays`、`tools`。插件按（环节、priority、id）排序加载，链式钩子（`lat_correction`、`plan_filter`、`long_target` 等）按这个顺序执行。未知环节拒载，旧宿主同样校验。检查：`offroad_pages_check.py` O22、`manifest_check.py` M1/M2。
 
 有插件要做时，按下面的顺序考虑加钩子（越靠前越可能先用到、风险越低）：
 
-| 顺序 | 类别 | 可能的钩子 | 理由 |
+| 顺序 | 环节 | 可能的钩子 | 理由 |
 |---|---|---|---|
 | 1 | `navigation` | 不需要新钩子：`source:map` + `processes()` 发布 `liveMapDataSP` / `navInstruction`（第 8 节） | 现有接口已够用，先写插件 |
 | 2 | `vehicle_params` | 只读的参数修正（例如转向比、质量），在 card 发布 CarParams 前调用 | 影响小、可在本机验证 |
@@ -224,7 +217,7 @@ Host E2E：`PYTHONPATH=tinygrad_repo python3 tools/sp_tesla_e2e/model_source_e2e
 | `plugins.send_msg(plugin, kind, payload, valid_for_ms)`、`plugins.PluginMsgs().fresh(kind)` / `.latest(kind, source)` | 任何插件代码 | 发布和读取 `pluginMsg`（8d 节），每个 `kind` 要声明 `msg:<kind>` |
 | `long_target(CP, params)`（类方法） | plannerd，每个计划周期 | 返回带 `update(sm, v_ego, v_cruise)` 的对象，给出目标车速（m/s）或 None。低于巡航车速：和 SP 自己的限速一样取最小；高于巡航车速：只替换驾驶员设定车速，且只在已接管、没踩油门/刹车、没 override 时生效，多个插件取最低，上限 `V_CRUISE_MAX`。MPC 跟车、模型和 SP 的限速功能仍然取最小，所以加速不会越过它们 |
 | `alert_source(CP, params)`（类方法） | selfdrived，每周期（100 Hz） | 返回带 `update(sm) -> list[PluginAlert]` 的对象。`PluginAlert(severity, title, body)`，severity 为 `info`（无声）、`warning`（提示音）、`critical`（警告音）。插件报警在任何状态都显示，不会让系统退出，优先级最高到 MID，SP 自己的退出和严重报警永远优先。标题最多 60 字符，正文 80 |
-| `lane_change_policy(params)`（类方法） | modeld 的 DesireHelper | 返回带 `allow(carstate, direction, default) -> bool` 的对象，只替换 SP 的"不用推方向盘就开始变道"这一个判断（`default` 是 SP 原来的结果）。打转向灯、最低车速、盲区和路沿检查仍然强制生效 |
+| `lane_change_policy(params)`（类方法） | modeld 的 DesireHelper | 返回带 `allow(carstate, direction, default) -> bool` 的对象，只替换 SP 的"不用推方向盘就开始变道"这一个判断（`default` 是 SP 原来的结果）。打转向灯、最低车速、盲区和路沿检查仍然强制生效（SP #2049 起：驾驶员推方向盘可以越过路沿，盲区始终阻止） |
 | `lat_correction(CP, params)`（类方法） | controlsd，横向生效时每个控制周期 | 返回带 `update(sm, v_ego, curvature) -> 曲率或 None` 的对象。多个修正按优先级串联；总改动不超过 0.5 m/s² 横向加速度对应的曲率（低于 5 m/s 按 5 m/s 算），NaN/inf 被忽略；之后 SP 的 `clip_curvature`（ISO 加加速度和加速度限制）照常生效 |
 | `lat_controller(CP, CP_SP, CI, params)`（类方法） | controlsd | 返回和 `LatControl` 接口一致的对象（`update(...) -> (steer, 转角, lac_log)`、`reset()`），替换 SP 的横向控制器。输出不和 SP 比较、不额外限制，只靠车端转角速率限制和 panda 兜底。SP 的控制器一直并行运行；插件出错或输出 NaN/inf 时，本次运行剩下的时间都改用 SP 的输出 |
 | `long_owner(CP, CP_SP, params)`（类方法） | controlsd | 可选独占 `role:long.owner`，返回带 `desired(ctx, CS) -> None / "stock" / "sp"` 的对象。只提议 owner，所有 host veto 和 Panda health 确认仍生效；构造/调用异常、非法返回值记录故障并停用本行程，不自动提升落败插件；None 保持 owner。collector/context/手动脉冲合同见 [host design](docs/design/xpilot-long-owner-host.md) |
@@ -293,7 +286,7 @@ class MyTile(Tile):
 
 ### 5.2 API 一览
 
-**清单和元数据**（`openpilot/tesla/manifest.py`）：`plugin.json` 字段见 4.1；`CATEGORIES`（类别和显示名）；`API_VERSION`（现在 1）；claims 格式见 4.3。宿主从清单填好 `Plugin` 的类属性：`NAME`、`TITLE`、`DESCRIPTION`、`CATEGORY`、`PRIORITY`、`ENABLE_PARAM`、`CLAIMS`、`SETTINGS`、`MANIFEST`（含 `version`、`author`），插件只读。插件自己可以设 `SERVICES`（钩子要额外订阅的服务）。
+**清单和元数据**（`openpilot/tesla/manifest.py`）：`plugin.json` 字段见 4.1；`CATEGORIES`（主分类和显示名）、`category_of()`（由 claims 算主分类）；`API_VERSION`（现在 1）；claims 格式见 4.3。宿主从清单填好 `Plugin` 的类属性：`NAME`、`TITLE`、`DESCRIPTION`、`CATEGORY`、`PRIORITY`、`ENABLE_PARAM`、`CLAIMS`、`SETTINGS`、`MANIFEST`（含 `version`、`author`），插件只读。插件自己可以设 `SERVICES`（钩子要额外订阅的服务）。
 
 **Python 钩子**（`openpilot/tesla/plugin.py` 的 `Plugin`；可选 `event_filter` 由声明 claim 的类直接实现，其余有空的默认实现，详细规则见 4.4）：
 
@@ -328,6 +321,7 @@ class MyTile(Tile):
 | `ui.tiles.TileSpec` | `id, title, sizes, services, show, hz, order`（见第 9 节） | 磁贴声明 |
 | `ui.plugin_ui.ScreenOverlay` | `update(sm)`、`draw(zones)` | 大屏行驶时的整屏叠加层 |
 | `ui.plugin_ui.HudOverlay` | Widget：`update()`、`render(rect)`；读 `ui_state.sm` | mici 行驶画面叠加层 |
+| `ui.plugin_ui.RoadOverlay` | `update(sm)`、`draw(road)`；`road.lane_points()`、`road.polygon(points, half_width)`、`road.rect` | mici 路面上的叠加层（画在轨迹线之后，未接管时不画） |
 
 **消息**（插件可以读或发布）：`carStateSP` 里插件自己的字段（例 `teslaBattery`）、`liveMapDataSP` 和 `navInstruction`（地图和导航，第 8 节）、`pluginMsg`（插件通信，8d），以及 SP 的所有服务（`carState`、`radarState`、`longitudinalPlan`、`deviceState` 等）。
 
@@ -451,6 +445,8 @@ Tesla 接管例外（用户 2026-10-25 决定）：`safety.h` 的最低频率检
 
 独占 claim `role:stock.ap` 的插件生效时，card 在插件 `setup` 之后给 `CP_SP.safetyParam` 置固定位 `TeslaSafetyFlagsSP.STOCK_AP`（16，宿主按 claim 设置，插件代码不写 safetyParam）。panda `tesla.h` 看到该位后：bus 2 的 0x488/0x2B9/0x27D 全部转发（原车 Autosteer、TACC、EAC 和 NoA 照常工作，不受 `tesla_stock_lkas`、long owner 影响）；openpilot 自己在 bus 0 发的 0x488/0x2B9/0x27D 一律拒绝。runtime rules（bus 1）不变，`controls_allowed` 来自原车 cruise 状态。持有者同时声明 `role:engagement.state`，返回永不接管的状态机、`mads=None`，所以 SP 不接管。改位需要刷 panda；检查：`test_tesla.py` SA1–SA3、`plugin_host_check.py` P50。插件 `tesla_eap`（插件仓库）在此模式下按 t2can Advanced EAP 规则，在 NoA 变道请求（0x24A）后按设定延时拨一次转向杆（0x249）。
 
+Tesla 转角速率（用户 2026-10-28）：`opendbc/car/tesla/values.py` 的 `CarControllerParams.ANGLE_LIMITS.MAX_ANGLE_RATE` 由 5 改为 8 °/20 ms（EPS 在静止时 12 才报故障）。横向 jerk 限制在约 15 km/h 以上已低于 8、约 19 km/h 以上低于 5，所以只加快低速大角度转弯；panda 只查 ISO jerk/加速度，不受影响。`tesla_mixed_control` 1.2.0 的最终限幅跟随车端参数。
+
 ### G8 动态纵向 owner（X-20261026-49C，host + X-48 固件）
 
 线协议和 DRAIN 时序见 [wire contract](docs/design/xpilot-long-owner.md)，主机实现、
@@ -467,16 +463,12 @@ controlsd 启动时只调用一次 `plugins.long_owner_policy(params, CP, CP_SP)
 `desired_owner(ctx, CS)` 每周期接线此 callable。返回 None 保持 owner，stock/sp 仅为提议。
 构建/调用错误、坏输出会 fault 并在本行程禁用该策略，不提升 loser。运行时故障锁定至 disengage。
 
-`XpLongOwnerManual` 为核心 BOOL，默认关闭，只在停车设置页修改、下次行程读取。
-手动触发为车辆总线 bus 1 的 `UI_status2`（0x3DF）`UI_activeTouchPoints == 4` 上升沿；
-先观察非四指样本，按住不重触发。3/5 指不触发纵向；MADS 仍严格匹配其配置的指头数，
-配置 3 指时不会被四指触发。雨刷按钮只保留原车功能。手动脉冲优先于插件提议，宿主保持目标
-经过 1 s debounce 和请求确认，提交、拒绝、锁定或 disengage 时清除，绝不直接改 owner 或 CP。
-若另将 MADS 配成 4 指，会共享同一手势；同时使用手动纵向时将 MADS 配为 3 或 5 指。
+手动切换（四指触屏）不在宿主里（用户 2026-10-28）：由持有 `role:long.owner` 的插件实现，现为 `tesla_dynamic_acc` 的开关设置
+`XpTeslaDynamicAccTouch`。宿主只给插件的提议做 1 s debounce、冷却、否决、锁定和 panda 确认，不读触屏、不单独保存手动目标。
 
 Host floor：目标确认 1 s，完成/拒绝后 cooldown 2 s；gas/brake/standstill/stockAeb/accFault、
 |aEgo|≥0.35、lead TTC<3 s、OEM 不活跃/过期及对应 accel 两端差>0.20 均拒绝。
-两次连续拒绝、request/ack 不符>0.5 s、pandaStates 过期、Panda 永久故障或策略故障后锁定切换直到 disengage（临时故障如 interruptRateCan2 只暂停新请求，不锁定）；拒绝保持
+两次连续拒绝、request/ack 不符>0.5 s、pandaStates 过期、Panda 永久故障或策略故障后锁定切换直到 disengage（其他临时故障只暂停新请求，不锁定；只有 interruptRateCan2 时不暂停，因为这台车整趟都带着它，用户 2026-10-28，X-20261028-75d）；拒绝保持
 ack owner，Panda reset 跟随其确认后的初始 owner。CC_SP 与 CC 同周期配对；longActive/override/cancel、
 planner/LongControl 和 CAN 使用同一 owner，card 拒绝不配对消息。
 
@@ -580,7 +572,7 @@ X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试�
 - **行驶时**：mici 画面默认在 `(300,59,1560,699)`（第 1–6 列 × 第 0–2 行这块区域里按 536:240 居中，缩放约 2.91），这 18 格不放磁贴；磁贴绕着它排：第 0 列、第 7 列和第 3 行的第 1–6 列，共 14 格。没固定位置的磁贴在自己支持的尺寸里从保存的尺寸往小试，放得下就用。2026-10-25 用户决定覆盖旧的“画面固定”规则：从画面内开始拖动可移动画面，松手时吸附到整格，6×3 格的占位保持在网格内（列 0–2、行 0–1）。位置改变后沿用上述 first-fit 重排，覆盖的固定磁贴也重新找空位。其余触摸全部忽略，画面内点击也不交给 mici 控件；报警（用户 2026-10-28）用 mici 报警自带的渐变遮罩画在画面下方的空隙里（上方空隙更大时画在上方），宽度与画面相同，盖在磁贴上，按空隙高度放大（`tiles.alert_band`）；导航画在画面右侧空隙（左侧更大时画在左侧），高度与画面相同（`tiles.nav_column`）：有 mici 路线时画 NavigationPanel（按列宽放大），否则在 lean_navigation 有转向信息时画它的竖排大箭头和大字。行驶磁贴不再给报警或导航让格；小屏保持原布局。
 - **摄像头颜色**：接合与未接合都保持彩色；`cameraview.py` 固定 shader 的 `engaged=0`，保留原 shader 和驾驶员相机增强。
 - **停车时**：显示停车布局。点一下磁贴打开它的详情页（有 `PAGE` 的）；长按（0.6 s）磁贴或空格进入编辑模式。
-- **行驶/停车画面切换**（用户 2026-10-26）：启动（ignition）后挂 P 档显示停车画面（磁贴、设置），离开 P 档显示行驶画面。启动时长按可手动切换：行驶画面上在 Driving view 以外长按进入停车画面，停车画面上长按回到行驶画面（启动时长按不进入编辑）。手动选择保持到换挡或 openpilot/MADS 接管为止。启动时设置页仍按 onroad 规则只读。
+- **行驶/停车画面切换**（用户 2026-10-26）：启动（ignition）后挂 P 档显示停车画面（磁贴、设置），离开 P 档显示行驶画面。启动时长按可手动切换：行驶画面上在 Driving view 以外长按进入停车画面，停车画面上长按回到行驶画面（启动时长按不进入编辑）。手动选择保持到换挡或 openpilot/MADS 接管为止。启动时挂 P 档且未接合时，插件开关和插件/车辆设置可以修改，下次行程生效（用户 2026-10-28，`offroad.editable()`，O21）；商店、模型、软件、设备操作仍只在停车（ignition 关）时可用。
 - **编辑模式**（只在停车时）：三个按钮 `Park | Drive | Done` 为 320×160 px、56 px 字号。按钮栏**不保留格子**（用户 2026-10-26），默认放在遮挡磁贴和加号最少的边缘位置；从任一按钮开始拖动会移动整栏并限制在屏幕内，位置只保留在本进程、不会保存，Park/Drive 切换和以后再次编辑仍沿用。按钮栏手势优先于磁贴、画面和 HUD；点击仍切换布局或 Done 退出。拖动磁贴、画面或 HUD 时按钮栏隐藏，拖动按钮栏时跟随手指显示。编辑行驶布局时灰色画面仍可拖动吸附。选中磁贴可改尺寸、取消固定或拖动固定；点加号打开 Add tiles；点空白取消选中。
 - **保存**：布局存在 `XpilotTileLayout`（JSON `{"park": {"tiles": [[id, 尺寸, 列, 行], ...], "hidden": [id, ...]}, "drive": {"tiles": [...], "hidden": [...], "view": [列, 行], "hud": {"插件 id": [fx, fy, visible, scale]}}}`，列/行为 `null` 表示不固定；旧格式 `{"tiles": [[id, 尺寸]], "hidden": [...]}` 读作停车布局），不进 `params_keys.h`，由 `plugin_params.ParamsView` 存成文件 `/data/xpilot_plugins/.params/XpilotTileLayout`。读取时丢掉不认识的 id、不属于这套布局的磁贴和不支持的尺寸；新出现的磁贴按 (`order`, `id`) 用默认尺寸排到最后；插件关闭时它的磁贴不显示但位置保留。`drive.view` 缺失、格式错误或越界时回到默认 `(1,0)`；移动画面时两套磁贴布局一起保存。
 - **加磁贴**：插件的写在 `plugins/<名字>/ui.py`；不属于插件的放 `openpilot/tesla/ui/slots/`。继承 `Tile`，写 `SPEC = TileSpec(id, title, sizes=..., services=..., show="onroad"|"offroad"|"always", hz=..., order=...)`，会被自动发现。磁贴没有自己的颜色：都使用宿主设置的 `Tile.COLOR`，行驶时为中性深灰，停车时为所选主题色。
