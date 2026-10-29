@@ -41,7 +41,7 @@ def _build_libsafety(release: bool = False) -> str:
 
 
 def cdef_from_file(path: Path) -> str:
-  source = path.read_text()
+  source = path.read_text().replace("SAFETY_HELPER ", "")
   source = re.sub(r"//[^\n]*|/\*.*?\*/", "", source, flags=re.DOTALL)
   source = re.sub(r"__attribute__\(\(.*\)\)", "", source)
 

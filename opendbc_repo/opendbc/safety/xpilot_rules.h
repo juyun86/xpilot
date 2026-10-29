@@ -113,6 +113,24 @@ static bool xpilot_cover(uint8_t *coverage, uint8_t offset, uint8_t width) {
   return valid;
 }
 
+static uint8_t xpilot_validate_sensor_motion(const uint8_t *r) {
+  // A closed wire profile, not caller-selected bounds or arbitrary CAN permission.
+  // 0x300/0x301 bus 1, DLC 2; fresh 0x60A bus 1 DLC 4; 200 ms RX TTL;
+  // >=40 ms TX spacing and <=25 frames per second, including disengaged sensing.
+  static const uint8_t expected[84] = {
+    [0] = 84U, [2] = 2U, [5] = 3U, [8] = 10U, [9] = 6U,
+    [12] = 1U, [13] = 1U, [14] = 2U, [15] = 4U,
+    [16] = 0x40U, [17] = 0x0DU, [18] = 3U,
+    [20] = 0x40U, [21] = 0x9CU, [24] = 2U, [26] = 25U,
+    [32] = 0x40U, [33] = 0x42U, [34] = 0x0FU,
+  };
+  bool valid = r[4] <= 1U;
+  for (uint8_t i = 0U; i < 84U; i++) {
+    valid = valid && ((i == 4U) || (r[i] == expected[i]));
+  }
+  return valid ? 0U : 7U;
+}
+
 static uint8_t xpilot_validate_rule(const uint8_t *r) {
   uint8_t error = 0U;
   const uint8_t length = r[14];
@@ -123,7 +141,9 @@ static uint8_t xpilot_validate_rule(const uint8_t *r) {
   const uint32_t interval = xpilot_read_le(&r[20], 4U);
   const uint32_t idle = xpilot_read_le(&r[28], 4U);
   const uint32_t span = xpilot_read_le(&r[32], 4U);
-  if ((r[2] != 1U) || (fields > 8U) || (tuples > 8U)) {
+  if (r[2] == 2U) {
+    error = xpilot_validate_sensor_motion(r);
+  } else if ((r[2] != 1U) || (fields > 8U) || (tuples > 8U)) {
     error = 6U;
   } else if ((addr > 0x1FFFFFFFU) || (xpilot_read_le(&r[8], 4U) > 0x1FFFFFFFU) ||
              (r[12] != 1U) || (r[13] != 1U) || (length == 0U) || (length > 8U) || (r[15] != length) ||
@@ -329,6 +349,18 @@ static bool xpilot_rule_tx(const CANPacket_t *msg, const uint8_t *r, XpilotRuleS
   bool allowed = s->template_valid && (safety_get_ts_elapsed(now, s->template_ts) <= xpilot_read_le(&r[16], 4U)) &&
                  (!s->tx_valid || (safety_get_ts_elapsed(now, s->last_tx) >= xpilot_read_le(&r[20], 4U)));
   bool exempt = r[3] > 0U;
+  const bool sensor_motion = r[2] == 2U;
+  if (sensor_motion) {
+    const uint32_t raw = ((uint32_t)msg->data[0] << 8U) | msg->data[1];
+    if (msg->addr == 0x300U) {
+      const uint32_t speed = raw & 0x1FFFU;
+      const uint32_t direction = raw >> 14U;
+      allowed = allowed && ((raw & 0x2000U) == 0U) && (speed <= 4250U) &&
+                (direction <= 2U) && ((direction == 0U) == (speed == 0U));
+    } else {
+      allowed = allowed && (raw >= 22768U) && (raw <= 42768U);
+    }
+  }
   uint32_t values[8] = {0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U};
   for (uint8_t i = 0U; i < 8U; i++) {
     allowed = allowed && ((msg->data[i] & r[60U + i]) == (s->template_data[i] & r[60U + i])) &&
@@ -372,7 +404,7 @@ static bool xpilot_rule_tx(const CANPacket_t *msg, const uint8_t *r, XpilotRuleS
   }
   const bool span_ok = (r[24] == 2U) || (xpilot_read_le(&r[32], 4U) == 0U) ||
                        (safety_get_ts_elapsed(now, s->session_ts) < xpilot_read_le(&r[32], 4U));
-  allowed = allowed && (controls_allowed || exempt) &&
+  allowed = allowed && (controls_allowed || exempt || sensor_motion) &&
             (exempt || new_session || ((s->count < xpilot_read_le(&r[26], 2U)) && span_ok));
   if (allowed) {
     if (!exempt) {

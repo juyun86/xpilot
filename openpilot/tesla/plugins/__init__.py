@@ -160,6 +160,8 @@ class CarPlugins:
     self.plugins = []
     self.params = params
     self._gate = None
+    from openpilot.tesla.card_context import CardSubscriptions
+    self._contexts = CardSubscriptions()
     if CP.brand != "tesla":
       return
     from openpilot.tesla.core_host import CardGate
@@ -198,11 +200,13 @@ class CarPlugins:
       rules += own
     self.params.put("XpilotPandaRules", panda_rules.param(panda_rules.encode_rules(rules)), block=True)
 
-  def _sends(self, hook: str, *args) -> list:
+  def _sends(self, hook: str, *args, contexts=None) -> list:
     """Like _each, but every CanData must match one of the plugin's can.tx claims, else the plugin is dropped."""
     out = []
     for p in list(self.plugins):
       try:
+        if contexts is not None and p.NAME in contexts:
+          p.card_context(contexts[p.NAME], args[-1])
         sends = list(getattr(p, hook)(*args))
         allowed = mf.can_tx(p.CLAIMS)
         if bad := [s for s in sends if (s[0], s[2]) not in allowed]:
@@ -221,7 +225,15 @@ class CarPlugins:
     self._each("publish_state", CS_SP)
 
   def control_sends(self, CS, CC, now_ns: int) -> list:
-    return self._sends("control_sends", CS, CC, now_ns)
+    consumers = [p for p in self.plugins if type(p).card_context is not Plugin.card_context]
+    try:
+      contexts = self._contexts.poll({p.NAME: p.SERVICES for p in consumers})
+    except Exception as exc:
+      for p in consumers:
+        self.plugins.remove(p)
+        record_fault(p.NAME, 'card.card_context', exc)
+      contexts = {}
+    return self._sends("control_sends", CS, CC, now_ns, contexts=contexts)
 
   def service_params(self, params) -> None:
     self._each("service_params", view(params))
@@ -608,8 +620,11 @@ def apply_long_planner(planners: list, planner, sm) -> None:
 class _GuardedRadar:
   """Reads the plugin radar while the port's RadarInterface runs alongside; if the plugin raises the port's takes over for good."""
 
-  def __init__(self, plugin, sp):
+  def __init__(self, plugin, sp, services=()):
     self.plugin, self.sp, self._plugins = plugin, sp, [plugin]
+    from openpilot.tesla.card_context import CardSubscriptions
+    self._context = CardSubscriptions()
+    self._services = tuple(services)
 
   def __getattr__(self, name):
     return getattr(self.sp, name)
@@ -617,6 +632,14 @@ class _GuardedRadar:
   def update(self, can_list):
     sp_out = self.sp.update(can_list)
     if self._plugins:
+      if hasattr(self.plugin, "radar_context"):
+        try:
+          context = self._context.poll({self.plugin.plugin_name: self._services})
+          self.plugin.radar_context(context[self.plugin.plugin_name], time.monotonic_ns())
+        except Exception as exc:
+          self._plugins.clear()
+          record_fault(self.plugin.plugin_name, "card.radar_context", exc)
+          return sp_out
       ok, out = _call(self._plugins, self.plugin, "update", "card.radar_interface", can_list)
       if ok:
         return out
@@ -628,4 +651,7 @@ def radar_interface(CP, CP_SP, params, sp_radar):
   if CP.brand != "tesla":
     return sp_radar
   found = _collect(params, "radar_interface", "source:radar", "card", CP, CP_SP, params)
-  return _GuardedRadar(found[0], sp_radar) if found else sp_radar
+  if not found:
+    return sp_radar
+  services = next((c.SERVICES for c in PLUGINS if c.NAME == found[0].plugin_name), ())
+  return _GuardedRadar(found[0], sp_radar, services)

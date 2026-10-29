@@ -211,6 +211,7 @@ Host E2E：`PYTHONPATH=tinygrad_repo python3 tools/sp_tesla_e2e/model_source_e2e
 | `observe_can(can_list, now_ns)` | card，每批 CAN | 只读解析；返回需要立即发送的帧（少用） |
 | `publish_state(CS_SP)` | card，每个周期 | 填写 carStateSP 里本插件的字段；也可以从这里读 `CS_SP.speedLimit` |
 | `control_sends(CS, CC, now_ns)` | card，每个控制周期 | 返回要追加发送的 `CanData` |
+| `card_context(context, now_ns)` | card，紧接在插件自己的 control_sends 前 | 按 SERVICES 声明订阅，只读消息及原始健康状态/时间戳；非阻塞，无额外 CAN 权限。见 [card context API](docs/design/card-context-api.md) |
 | `service_params(params)` | card，约 10 Hz | 重新读取实时设置 |
 | `processes()`（类方法） | manager | 额外进程。manager 相关的 import 写在方法内部 |
 | `role_processes(role, procs)`（类方法） | manager | 选择宿主提供的 SP 角色进程，规则见 `role:perception.model`；默认返回空列表 |
@@ -498,6 +499,8 @@ X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试�
 ## 7. 雷达接入接口
 
 写一个声明 `source:radar` 的插件，实现 `radar_interface` 钩子（见 4.4）。插件关闭、没有声明或出错时用原车雷达。外接雷达如果需要发送报文，还要声明 `can.tx` 并携带 panda 运行时规则。
+
+雷达运动输入使用范围固定的 [sensor_motion.v1 合同](docs/design/sensor-motion-rule.md)：声明对应的 `requires.rule_types`，宿主只编译两个固定报文，Panda 单独检查数值、频率和接收时效。它不扩大车辆控制权限，也不代表旧固件支持；旧固件拒绝规则时必须停止该功能，不能绕过发送检查。
 
 `opendbc_repo/opendbc/car/car_helpers.py` 里的 `RADAR_PLUGINS` 是旧接口，已不用，保持为空（opendbc 不改）。
 

@@ -168,16 +168,14 @@ bool can_check_checksum(CANPacket_t *packet) {
 }
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-  bool supported_length = true;
-#ifdef STM32F4
-  supported_length = GET_LEN(to_push) <= 8U;
-#endif
   ENTER_CRITICAL();
   if ((bus_number < PANDA_CAN_CNT) && (can_slots_empty(can_queues[bus_number]) == 0U)) {
     tx_buffer_overflow += 1U;
-  // H7 supports every packet length; F4 restricts admission to classic CAN.
-  // cppcheck-suppress knownConditionTrueFalse
-  } else if (supported_length && (skip_tx_hook || safety_tx_hook(to_push) != 0)) {
+  } else if (
+#ifdef STM32F4
+    (GET_LEN(to_push) <= 8U) &&
+#endif
+    (skip_tx_hook || safety_tx_hook(to_push) != 0)) {
     if (bus_number < PANDA_CAN_CNT) {
       // add CAN packet to send queue
       tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;

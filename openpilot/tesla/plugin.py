@@ -33,7 +33,7 @@ class Plugin:
   CLAIMS: tuple[str, ...] = ()
   SETTINGS: tuple = ()
   MANIFEST = None
-  SERVICES: tuple[str, ...] = ()  # extra services plannerd, selfdrived and controlsd subscribe for this plugin's hooks
+  SERVICES: tuple[str, ...] = ()  # declared services for process hooks, including card_context
 
   def __init__(self, CP, params):
     """card: once per car, after fingerprinting. Read Params here or in service_params()."""
@@ -53,6 +53,11 @@ class Plugin:
   def control_sends(self, CS, CC, now_ns: int) -> list:
     """Every control cycle: extra CanData to send. Each address needs a panda safety plugin."""
     return []
+
+  def card_context(self, context, now_ns: int) -> None:
+    """Before control_sends: read-only SERVICES snapshot and original health/timestamps.
+    Nonblocking; validate freshness before use. Does not grant CAN TX permission.
+    """
 
   def service_params(self, params) -> None:
     """~10 Hz in card's params thread: reload live settings."""

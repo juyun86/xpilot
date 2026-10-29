@@ -51,6 +51,14 @@ def _int(value, lo, hi, name):
 
 
 def encode_rule(r):
+  if isinstance(r, dict) and r.get('type') == 'sensor_motion.v1':
+    _keys(r, 'type tx_address tx_bus')
+    addr = _int(r['tx_address'], 0x300, 0x301, 'sensor motion address')
+    _int(r['tx_bus'], 1, 1, 'sensor motion bus')
+    out = bytearray(84)
+    struct.pack_into('<HBBII4BII2BHII', out, 0, 84, 2, 0, addr, 0x60A,
+                     1, 1, 2, 4, 200_000, 40_000, 2, 0, 25, 0, 1_000_000)
+    return bytes(out)
   if not isinstance(r, dict) or r.get('type') != 'template_clone.v1':
     raise ValueError('rule type must be template_clone.v1 (ABI 1)')
   span_key = 'window_us' if r.get('session') == 2 else 'max_span_us'

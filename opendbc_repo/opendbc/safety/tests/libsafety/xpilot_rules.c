@@ -1,3 +1,4 @@
+#define crc32 xpilot_test_crc32
 #include "../../../../../panda/board/crc.h"
 #include "../../../../../panda/board/xpilot_rules.h"
 int test_control(unsigned int req, unsigned int p1, unsigned int p2, uint8_t *resp) {
