@@ -49,11 +49,13 @@ jobs:
       run: |
         set -e
         for check in static_imports tile_layout_check plugin_host_check manifest_check safety_manifest_check \
-                     phase2_check phase3_check phase4_check store_check offroad_pages_check agnos_update_check navigation_ingress_check; do
+                     phase2_check phase3_check phase4_check store_check offroad_pages_check agnos_update_check; do
           echo "::group::$check"
           python3 tools/sp_tesla_e2e/$check.py > /tmp/xpilot-ci/$check.json
           echo "::endgroup::"
         done
+    - name: UDP navigation ingress contract
+      run: python3 tools/sp_tesla_e2e/navigation_ingress_check.py
     - name: Plugin message broker end to end (Linux credentials)
       run: python3 tools/sp_tesla_e2e/plugin_msg_e2e.py
     - name: Store activation transaction end to end
