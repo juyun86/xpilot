@@ -36,11 +36,6 @@ class Plugin:
   SERVICES: tuple[str, ...] = ()  # extra services plannerd, selfdrived and controlsd subscribe for this plugin's hooks
 
   @classmethod
-  def ui_glyphs(cls) -> str:
-    """Extra printable glyphs for enabled, declared UI providers."""
-    return ""
-
-  @classmethod
   def network_vpn(cls):
     """Bounded host VPN client for an enabled role:network.vpn owner."""
     if 'role:network.vpn' not in cls.CLAIMS:

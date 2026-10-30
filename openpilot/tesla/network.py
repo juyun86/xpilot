@@ -7,9 +7,10 @@ import subprocess
 
 ROOT = Path('/data/mihomo')
 CONTROL = Path('/data/xpilot_network')
+GATEWAY_PYTHON = Path('/usr/local/venv/bin/python')
 OWNER = CONTROL / 'vpn-owner.json'
 DEV, TABLE, MARK, UID = 'c3mh0', '17890', '17890', 61400
-ACTIONS = frozenset(('prepare', 'startcore', 'stopcore', 'enable', 'disable'))
+ACTIONS = frozenset(('prepare', 'startcore', 'stopcore', 'enable', 'disable', 'status', 'transition'))
 
 
 def checked_action(provider, action):
@@ -25,11 +26,11 @@ def require_owner(owner, provider):
 
 
 def parked():
-  if Path('/data/params/d/IsOffroad').read_text().strip() != '1':
-    raise PermissionError('Park before changing the VPN')
-  engaged = Path('/data/params/d/IsEngaged')
-  if engaged.exists() and engaged.read_text().strip() == '1':
-    raise PermissionError('Disengage before changing the VPN')
+  from openpilot.common.params import Params
+  from openpilot.tesla import host_api
+  params = Params()
+  if not host_api.parked(params) or params.get_bool("IsEngaged"):
+    raise PermissionError("Park and disengage before changing the VPN")
 
 
 def owner():
@@ -52,15 +53,7 @@ def authorized(provider):
   from openpilot.tesla import manifest as mf
   builtin, _ = mf.load_all(mf.PLUGINS_DIR)
   installed, _ = mf.load_all(mf.INSTALL_DIR)
-  taken_ids = {m.id for m in builtin}
-  taken_keys = mf.compiled_param_keys()
-  specs = set()
-  accepted = list(builtin)
-  for m in installed:
-    if m.id in taken_ids or set(m.params) & (taken_keys | specs):
-      continue
-    accepted.append(m)
-    specs.update(m.params)
+  accepted, _, _ = mf.merge_manifests(builtin, installed)
   enabled = set()
   valid = []
   for m in accepted:
@@ -85,8 +78,8 @@ def authorized(provider):
     raise PermissionError('Network provider is not the enabled role owner')
 
 
-def run(*args, check=True):
-  return subprocess.run(list(args), capture_output=True, text=True, check=check, timeout=8)
+def run(*args, check=True, timeout=8):
+  return subprocess.run(list(args), capture_output=True, text=True, check=check, timeout=timeout)
 
 
 def ticks(pid):
@@ -116,12 +109,11 @@ class NetworkVPN:
 
   def request(self, action):
     checked_action(self.provider, action)
-    if action in ('prepare', 'startcore', 'enable'):
-      authorized(self.provider)
-      parked()
     helper = Path(__file__).resolve().with_name('network_gateway.py')
-    result = subprocess.run(['sudo', '-n', '/usr/bin/python3', str(helper), self.provider, action],
-                            capture_output=True, text=True, timeout=20)
+    # The fixed root gateway performs authorization and parking checks after locking.
+    result = subprocess.run(['sudo', '-n', '/usr/bin/timeout', '-k', '1s', '15s',
+                             str(GATEWAY_PYTHON), str(helper), self.provider, action],
+                            capture_output=True, text=True, timeout=20, start_new_session=True)
     if result.returncode:
       raise RuntimeError('Host VPN operation failed: ' + action)
     return json.loads(result.stdout)

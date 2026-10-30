@@ -22,7 +22,7 @@ C3/C3XL 保留各自锁定的 mr-one 引导链和写前白名单校验，禁止�
 ## 1b. 核心理念
 
 1. **SP 主栈，插件扩展。** 可替换部分是第 4.3 节列出的 role；panda safety、CAN 发送限幅、资源裁决和故障锁定留在宿主，构成最小安全内核。核心插件（`sp_engagement`、`sp_models`、`sp_safety_fallback`）在系统仓库 `openpilot/tesla/plugins/<id>/`，其他插件在插件仓库的 `plugins/<id>/`。
-2. **宿主定规则，插件只填内容。** 合并、裁决、限幅、出错隔离都写在宿主（`openpilot/tesla/`）里，插件改不了；插件只实现钩子。
+2. **宿主定规则，插件只填内容。** 合并、裁决、限幅、出错隔离都写在宿主（`openpilot/tesla/`）里，插件改不了；插件只实现钩子。宿主代码不写商店插件的 id、应用协议或后端细节；某类插件需要宿主特殊处理时，加一个任何插件都能声明的通用属性或钩子（例如磁贴的 `Tile.DOCK`），宿主按声明处理。
 3. **安全底线不可越过。** 车端检查、SP 的限幅和 panda safety 永远最后生效；插件再高的优先级也只能在这个范围内工作。
 4. **出错只影响自己。** 一个插件坏了，只有它被停用，SP 和其他插件照常运行。
 5. **先声明再使用。** 插件要用的 CAN 地址、进程、数据源和可替换环节都写进 `claims`；冲突由宿主按 `priority` 裁决，用户在插件市场里看得到。
@@ -317,7 +317,7 @@ class MyTile(Tile):
 
 | 类 | 接口 | 用途 |
 |---|---|---|
-| `ui.tile.Tile` | `SPEC`、`state(sm)`、`draw(rect, size, state)`；画图用 `face(rect)`、`draw_value(rect, value, unit, sub)`、`draw_lines(rect, lines)`、`value_row(rect, value, x, room, unit)`、`sub_line(rect, sub, x, y, room)`，以及模块函数 `text(...)`、`text_w(...)`、`fit(...)`、`clip(...)`、`lines_in(...)` 和颜色 `DIM`；颜色只用 `Tile.COLOR` | 大屏磁贴 |
+| `ui.tile.Tile` | `SPEC`、`state(sm)`、`draw(rect, size, state)`；可选 `DOCK="view"` 和 `docked(state)`（行驶时停靠在画面旁，见第 9 节）；画图用 `face(rect)`、`draw_value(rect, value, unit, sub)`、`draw_lines(rect, lines)`、`value_row(rect, value, x, room, unit)`、`sub_line(rect, sub, x, y, room)`，以及模块函数 `text(...)`、`text_w(...)`、`fit(...)`、`clip(...)`、`lines_in(...)` 和颜色 `DIM`；颜色只用 `Tile.COLOR` | 大屏磁贴 |
 | `ui.tiles.TileSpec` | `id, title, sizes, services, show, hz, order`（见第 9 节） | 磁贴声明 |
 | `ui.plugin_ui.ScreenOverlay` | `update(sm)`、`draw(zones)` | 大屏行驶时的整屏叠加层 |
 | `ui.plugin_ui.HudOverlay` | Widget：`update()`、`render(rect)`；读 `ui_state.sm` | mici 行驶画面叠加层 |
@@ -344,11 +344,9 @@ class MyTile(Tile):
 - 文件超过限制就按职责拆分，不要压缩代码、删注释或合并行来凑行数。
 - 检查：核心插件由 `manifest_check.py` M11 检查（`manifest.layout_problems`）；商店插件在安装时检查，不符合就拒绝安装（`store_check.py` S16）。
 
-### 网络 VPN 与插件字形
+### 网络 VPN
 
-`role:network.vpn` 的受管提供方通过 `Plugin.network_vpn()` 请求固定操作；接口只接受 prepare、startcore、stopcore、enable、disable，不接受命令、可执行路径或任意路由参数。资源、停车限制、所有权、故障清理及 IPv4/IPv6 范围见 [受限 VPN 合同](docs/design/xpilot-network-api.md)。连接只允许停车且未接管；离开停车状态后独立看守停止核心并清理本代资源。
-
-`ui.glyphs` 为共享资源，声明并实现 `ui_glyphs` 的已启用插件可在启动时提供受限的显示字形；节点原始身份和值不翻译。宿主限制字符串和字形数量，提供方异常不能使其他界面失效。接口声明不代表操作系统权限或沙箱。
+`role:network.vpn` 的受管提供方通过 `Plugin.network_vpn()` 请求固定操作；不接受命令、可执行路径或任意路由参数。资源、停车限制、所有权、失败清理及 IPv4/IPv6 范围见 [受限 VPN 合同](docs/design/xpilot-network-api.md)。连接只允许停车且未接管；行车切换发起有时限的同步清理，超时不会无限期阻塞行车进程。
 
 ### 5.4 宿主系统 API（host_api）
 
@@ -421,6 +419,8 @@ Tesla 自有地址按地址独占，与 bus/length 无关（包括 0x488、0x2B9
 
 商店插件的地址、模板、时效、频率和预算由各自 `plugin.json` 的规则声明；系统不维护按插件命名的清单。
 
+**传感器输入 `sensor_input`**（规则可选键，只能为 `true`，记录第 43 字节=1）：给未接管时也要发的传感器帧用，例如 ARS408 的车速 0x300 和横摆 0x301。RX 帧只证明设备在场：RX 长度可以和 TX 不同，RX 谓词和 copy 掩码必须全 0；TX 内容全部由字段范围和常量位约束。发送不要求 `controls_allowed`，但模板时效、字段范围、常量、校验和/counter、最小间隔和会话预算照常生效，不是预算豁免；全局门和模式独占地址不变。其他节点在同一总线发出该 TX 地址时，固件锁住这条规则直到下一次设置模式。宿主编码器拒绝 `opendbc/dbc/tesla_*.dbc` 里出现的 TX 地址；DBC 只列出已知地址，商店审核仍要检查地址。ARS408 是大端，引擎按 Intel 位序取字段，多字节数值按字节拆成多个字段（范围略放宽）。合同见 `docs/design/xpilot-panda-rules.md` 的 sensor_input 小节。
+
 - navassist：0x3E9，idle 模板、TTL 1.5 秒、模板 counter+1、通用 TESLA_SUM8、间隔 100 ms、首帧起 60 秒窗口最多 200 帧。(request,reason) 只能 (1,8)/(2,8)/(3,4)。cancel=(3,4) 只释放转向灯，允许未接管时发送；用户 2026-10-25 决定 cancel 不占用且不受会话预算限制。它仍受模板、校验和、counter、间隔、relay 和 noOutput 限制。
 
 app 固件专用 CAPS/STATUS/BEGIN/COMMIT/CLEAR 及 EP2 64 字节记录见合同。主机必须先验证 CAPS 是 app，绝不向 bootstub EP2 写规则。BEGIN 立即撤销旧表，CRC/格式/上传失败后空表；只允许非 car mode 提交。启动和每次切入非 car mode 清表，每次设置模式重置模板和预算，切入 car mode 中止未完成上传。表为空或失败不改变基础 Tesla 接管条件。
@@ -437,7 +437,7 @@ app 固件专用 CAPS/STATUS/BEGIN/COMMIT/CLEAR 及 EP2 64 字节记录见合同
 
 1 Hz `safety_tick` 将过期模板置为无效，达到最小间隔后清除 TX 标记，idle/window 到期后清零会话计数；时间戳保留用于 tick 之间的边界检查。模板只能由匹配的车端 RX 刷新，宿主不能刷新。RX/TX 的标准帧或扩展帧类型必须与地址范围一致。
 
-检查：`test_xpilot_rules.py`（失败矩阵 R1–R17、真实 C 引擎和 app loader、确定性重放）、`test_xpilot_rule_data.py`、全部 opendbc safety、cppcheck MISRA、可用时 mutation、F4/H7/body 构建与 RAM/flash 对照。运行 `XPILOT_RULES_ARTIFACT=<路径> PYTHONPATH=opendbc_repo python -m unittest opendbc.safety.tests.test_xpilot_rules` 保存可重复的流摘要。主机检查、固件构建、设备 active commit 和刷写分别报告；本任务无设备访问。
+检查：`test_xpilot_rules.py`（失败矩阵 R1–R17、真实 C 引擎和 app loader、确定性重放）、`test_xpilot_rule_data.py`、`test_xpilot_sensor_input.py`（S1–S9）、全部 opendbc safety、cppcheck MISRA、可用时 mutation、F4/H7/body 构建与 RAM/flash 对照。运行 `XPILOT_RULES_ARTIFACT=<路径> PYTHONPATH=opendbc_repo python -m unittest opendbc.safety.tests.test_xpilot_rules` 保存可重复的流摘要。主机检查、固件构建、设备 active commit 和刷写分别报告；本任务无设备访问。
 
 Tesla 接管例外（用户 2026-10-25 决定）：`safety.h` 的最低频率检查遵守 `ignore_frequency_check`，时效、校验和、计数器和质量检查不变；G4（用户 2026-10-26 决定）移除 SP 扩展的全局 `invalidLkasSetting=False`，CarState 保留真实原车 Autosteer 设置。仅开启 `tesla_mixed_control` 时由其 `event.filter` 删除该事件，关闭或未安装插件即恢复 SP 行为。插件 1.1.0 声明 `requires.hooks=["event_filter"]`；旧宿主拒绝未知 claim，必须同一次 offroad 会话先更新系统再安装插件。此任务不实现 AP owner/交接（G3），不改上游 `carstate.py` 或 panda 安全逻辑。
 
@@ -569,7 +569,7 @@ X-50 自动速度策略和 G3 横向均未实现；刷写和实车接合测试�
 - **网格**：8 列 × 4 行，格子 250 px，间隙 12 px（步距 262），整体居中，原点 `ORIGIN=(38,22)`。磁贴尺寸（列×行）：`small` 1×1、`medium` 2×2、`wide` 4×2、`large` 4×4。
 - **两套布局**：停车布局（`show` 为 `always`/`offroad` 的磁贴，整屏 32 格）和行驶布局（`show` 为 `always`/`onroad` 的磁贴，绕开 mici 画面的 14 格），各自保存顺序、尺寸、位置和隐藏列表；磁贴在停车时编辑，行驶画面的位置也可在行驶时拖动。
 - **排布**：先放固定了位置的磁贴（列表顺序；位置放不下、越界或压到 mici 画面就当作没固定），再把其余磁贴按列表顺序放进第一个放得下的位置。扫描顺序：停车时按列（第 0 列从上到下，再第 1 列……，Win 8 横屏）；行驶时按行、每行从两边往中间（第 0 列、第 7 列、第 1 列、第 6 列……），所以左右两边交替填充。前面留下的空洞会被后面的小磁贴填上；放不下的磁贴不显示（编辑模式里可以从"添加"重新放）。
-- **行驶时**：mici 画面默认在 `(300,59,1560,699)`（第 1–6 列 × 第 0–2 行这块区域里按 536:240 居中，缩放约 2.91），这 18 格不放磁贴；磁贴绕着它排：第 0 列、第 7 列和第 3 行的第 1–6 列，共 14 格。没固定位置的磁贴在自己支持的尺寸里从保存的尺寸往小试，放得下就用。2026-10-25 用户决定覆盖旧的“画面固定”规则：从画面内开始拖动可移动画面，松手时吸附到整格，6×3 格的占位保持在网格内（列 0–2、行 0–1）。位置改变后沿用上述 first-fit 重排，覆盖的固定磁贴也重新找空位。其余触摸全部忽略，画面内点击也不交给 mici 控件；报警（用户 2026-10-28）用 mici 报警自带的渐变遮罩画在画面下方的空隙里（上方空隙更大时画在上方），宽度与画面相同，盖在磁贴上，按空隙高度放大（`tiles.alert_band`）；导航画在画面右侧空隙（左侧更大时画在左侧），高度与画面相同（`tiles.nav_column`）：有 mici 路线时画 NavigationPanel（按列宽放大），否则在 lean_navigation 有转向信息时画它的竖排大箭头和大字。行驶磁贴不再给报警或导航让格；小屏保持原布局。
+- **行驶时**：mici 画面默认在 `(300,59,1560,699)`（第 1–6 列 × 第 0–2 行这块区域里按 536:240 居中，缩放约 2.91），这 18 格不放磁贴；磁贴绕着它排：第 0 列、第 7 列和第 3 行的第 1–6 列，共 14 格。没固定位置的磁贴在自己支持的尺寸里从保存的尺寸往小试，放得下就用。2026-10-25 用户决定覆盖旧的“画面固定”规则：从画面内开始拖动可移动画面，松手时吸附到整格，6×3 格的占位保持在网格内（列 0–2、行 0–1）。位置改变后（用户 2026-10-29）磁贴原地固定不动，画面新盖住的磁贴按画面宽/高反向挪进画面让出的格子（先竖向），放不下才取消固定按 first-fit 找空位（`tiles.move_view`）。其余触摸全部忽略，画面内点击也不交给 mici 控件；报警（用户 2026-10-28）用 mici 报警自带的渐变遮罩画在画面下方的空隙里（上方空隙更大时画在上方），宽度与画面相同，盖在磁贴上，按空隙高度放大（`tiles.alert_band`）；导航默认吸附在画面右侧空隙（左侧更大时画在左侧），高度与画面相同（`tiles.nav_column`）：有 mici 路线时画 NavigationPanel（按列宽放大），否则在停靠磁贴的 `docked(state)` 为真时画它的纹理。停靠磁贴是声明 `DOCK = "view"` 的磁贴（`tiles.dock`：多个时取 (`order`, `id`) 最小者；没有时只画 NavigationPanel），宿主不认具体插件 id；`docked` 抛异常按磁贴出错计数并当作不显示。停靠磁贴可单独移动（用户 2026-10-29）：行驶中拖动导航栏、或编辑 Drive 布局时从 “+” 加入，它就成为 drive 布局里的普通磁贴（按自身尺寸，可放上方、下方等任意空格，有路线时 NavigationPanel 画在磁贴里）；把它拖到画面上即重新吸附。状态存 `drive.nav_snap`（缺省吸附）。行驶磁贴不再给报警或导航让格；小屏保持原布局。
 - **摄像头颜色**：接合与未接合都保持彩色；`cameraview.py` 固定 shader 的 `engaged=0`，保留原 shader 和驾驶员相机增强。
 - **停车时**：显示停车布局。点一下磁贴打开它的详情页（有 `PAGE` 的）；长按（0.6 s）磁贴或空格进入编辑模式。
 - **行驶/停车画面切换**（用户 2026-10-26）：启动（ignition）后挂 P 档显示停车画面（磁贴、设置），离开 P 档显示行驶画面。启动时长按可手动切换：行驶画面上在 Driving view 以外长按进入停车画面，停车画面上长按回到行驶画面（启动时长按不进入编辑）。手动选择保持到换挡或 openpilot/MADS 接管为止。启动时挂 P 档且未接合时，插件开关和插件/车辆设置可以修改，下次行程生效（用户 2026-10-28，`offroad.editable()`，O21）；商店、模型、软件、设备操作仍只在停车（ignition 关）时可用。

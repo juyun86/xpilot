@@ -1,43 +1,27 @@
-# 宿主 IPv4 VPN 接口 v1
+# 受限 IPv4 VPN 宿主接口
 
-这是受审核网络插件的固定能力合同，不是任意系统命令接口。最高开发规范优先。
-Plugin.network_vpn() 返回 NetworkVPN，要求 role:network.vpn；requires.hooks 包含 network_vpn。
-只支持现有 mihomo IPv4 配置档，不替换驾驶角色、CAN 或 Panda；后续配置档需独立审查。
+受审核插件通过 `role:network.vpn` 和 `Plugin.network_vpn()` 请求固定操作。此接口不是通用命令或特权沙箱，不提供任意 shell、可执行文件路径、接口或路由参数。
 
-## 调用与权限
+插件可请求 `prepare`、`startcore`、`enable`、`stopcore`、`disable` 和只读 `status`。前三项需要有效的插件角色、运行服务 lease、停车和未接管状态；宿主在获取操作锁后复查。清理操作只处理当前 root 保存的资源归属记录，没有记录时不删除同名资源。行车切换使用宿主内部的 `transition` 操作，不是插件配置选项。
 
-宿主 API 为 NetworkVPN(provider_id).request(action)，worker 可直接导入该宿主客户端。
-只接受 prepare/startcore/stopcore/enable/disable，不接受命令文本、可执行路径或路由参数。
-提权入口固定为宿主 network_gateway.py，绝不导入下载插件的 Python 代码。
-prepare/startcore/enable 在调用前及取得宿主操作锁后复查停车和未接管，核对安装清单、总开关、角色优胜者及运行服务 lease。
-stopcore/disable 允许故障或卸载后清理，但只处理 root 所存 owner 的资源；没有 owner 不删除任何同名资源，其他 provider 无权清理。
-claims 不是防恶意代码的 OS 沙箱；AGNOS 已有 sudo 权限不由此 API 扩大。
+## 核心、配置和网络
 
-## 固定资源及归属
+宿主只接受固定 SHA-256 列表中的 Mihomo 核心，并将其复制到 `/data/xpilot_network/bin/mihomo`。root 控制目录与二进制由 root 持有；实际执行通过已校验的文件描述符并降至 UID/GID 61400。已有 `/data/mihomo/mihomo` 不被覆盖。
 
-- 私有数据与历史迁移目录 /data/mihomo；可执行核心固定为该目录 mihomo，配置为 config.yaml。
-- root 归属记录 /data/xpilot_network/vpn-owner.json，目录 0700、记录 0600。记录 provider、daemon PID/启动时间及原 ip_forward。
-- 独立 UID/GID 61400，接口 c3mh0 / 198.18.0.1/30，表和 mark 17890，规则优先级 17880/17890。
-- 回环控制/代理端口 17891/17890，DNS 17893；17894 是插件自有的临时私有 Wi-Fi 配对 HTTP 端口，令牌不写日志。
-- C3MH_MARK、C3MH_OUTDNS、C3MH_INPUT、C3MH_DNS 链。预留前检查接口、表、规则、链、UID 和端口，存在其他占用即拒绝，不接管或清空已有资源。
-- 公共 IPv4 经 TUN，回环、RFC1918、链路本地和组播直连；不全局接管 IPv6，不改默认主路由和 DNS 配置文件。热点规则仅在 192.168.43.1 存在时添加。
+配置和密钥从 `/data/mihomo` 的固定文件读取，禁止跟随符号链接，并转换为受限配置后暂存于私有运行目录。当前转换支持 SS、SSR、VMess、VLESS 和 Trojan 节点，不支持 proxy providers 和未列入白名单的节点选项。控制器、代理和 DNS 监听只允许回环；不开放插件指定的监听器。配置、订阅、节点身份和凭据不写入普通日志或公开包。
 
-## 生命周期与失败
+VPN 使用 `c3mh0`、路由表与标记 17890、策略优先级 17880。公共 IPv4 通过 VPN，回环、私网、链路本地和组播直连；IPv6 不由该接口接管。接口不启用 IP forwarding，也不为热点客户端设置转发。清理旧版本会话时，如果其记录了原 forwarding 状态，则按记录恢复。
 
-后台进程启动前写 network-lease.json（自身 PID、proc 启动 ticks）。root 独立看守核对该代服务与核心；退出后清理该代 owner，恢复普通网络及原转发状态，不误清理下一代。
-故障时先停止核心再删除 TUN。停用/卸载仍可调用宿主清理，不依赖被移走的插件提权脚本。
-从旧 Starlink 升级前，必须先停止旧进程并由旧版本清理旧资源；新宿主不会把无 owner 的历史资源当作自己所有。
-宿主命令超时、冲突及错误只返回短错误，不回显配置、订阅、节点凭据、内核 stderr 或令牌。
+VPN 有自己的资源归属记录。预留时拒绝已存在的接口、路由、规则、链、UID 和监听端口；带代次标记的链与钩子避免误删其他链。内核操作前记录待处理项，异常时按记录恢复；存在其他引用或无法确认归属时保留记录并报错。
 
-## 状态消息
+## 生命周期
 
-Starlink 声明 msg:network.vpn 和 source:plugin_msg。当前传输仅支持单发布者，独占 source 声明避免与其他声明该 source 的插件同时启用；不宣称提供多发布者 broker。
-每 3 秒用 plugins.send_msg 发布 running/gateway/configured/nodes/message，有效期 6000 ms，不含凭据或节点身份。
-磁贴用 PluginMsgs.fresh('network.vpn') 读取；无新鲜消息显示停止。长操作或退避期间过期也显示停止，不保留过期的“已连接”。
+插件进程只在停车时由用户手动请求启动。worker 写入自身 PID 和启动时间作为 lease；独立看守监测 lease、核心和停车状态，异常后清理本代资源。停用、卸载及启动失败也要清理，不依赖被卸载的插件代码。
 
-## 验证
+管理器从停车切换到行车时，在启动行车进程前发起有时间上限的同步清理。正常清理完成后返回；如果锁、系统调用或清理失败超过期限，记录错误并继续启动行车进程，不能声称异常情形下清理一定已完成。看守和后续清理可重试；不得无限期阻塞驾驶相关进程。
 
-先运行 network_contract_check 与 Starlink tests/contract_e2e.py，覆盖无 API、任意动作、外部资源清理、排队后停车结束和状态过期。
-再在停车设备验证实际 TUN、故障恢复、停用/卸载/升级清理、配对成功导入与回滚。检查不代表道路驾驶或全协议流量验证。
+本接口不承诺把设备变为热点 VPN 路由器，也不承诺支持所有 Mihomo 配置。升级前需要停止旧 VPN，旧版无归属记录的资源不由新版自动接管。`status` 和消息仅表示观察到的核心与网络状态，不等于外网可达。
 
-仅支持停车会话：运行期间独立看守持续检查停车和接合状态，离开停车状态后停止核心并清理本代路由；插件会在退出时清除手动连接请求。
+## 验证边界
+
+验证应分别覆盖参数与资源声明、配置过滤、受控文件和核心、正常启停、异常/超时/中断恢复、资源冲突和下一代会话隔离。C3 停车实测、真实行车切换、目标设备二进制重建和 CI 各自报告；隔离网络或合成输入不能替代实车结果。

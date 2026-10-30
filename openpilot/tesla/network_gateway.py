@@ -3,12 +3,50 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from openpilot.tesla.network import CONTROL, authorized, checked_action, parked, valid_lease
+source = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(source), *(str(source / item) for item in
+                ('opendbc_repo', 'msgq_repo', 'tinygrad_repo', 'rednose_repo'))]
+sys.path.append('/usr/lib/python3/dist-packages')
+from openpilot.tesla.network import CONTROL, authorized, checked_action, owner, parked, require_owner, valid_lease
+from openpilot.tesla.network_gate import mutation_gate
 from openpilot.tesla import network_routes as routes, network_runtime as runtime
+
+
+def teardown(provider):
+  try:
+    runtime.stopcore(provider)
+  except BaseException:
+    routes.disable(provider, retain=True)
+    raise
+  routes.disable(provider)
+
+
+def start_guarded(provider):
+  try:
+    runtime.startcore(provider)
+  except PermissionError:
+    # Leave the ownership journal for the onroad transition to clean after the lock is released.
+    raise
+  except BaseException:
+    with mutation_gate():
+      teardown(provider)
+    raise
+
+
+def routes_guarded(provider, handler):
+  try:
+    handler(provider)
+  except (PermissionError, subprocess.TimeoutExpired):
+    # A waiting transition or caller can retry cleanup using the journal.
+    raise
+  except BaseException:
+    with mutation_gate():
+      teardown(provider)
+    raise
 
 
 def main():
@@ -24,6 +62,15 @@ def main():
   CONTROL.mkdir(mode=0o700, parents=True, exist_ok=True)
   if CONTROL.is_symlink() or CONTROL.stat().st_uid != 0:
     raise PermissionError('Invalid host control directory')
+  if action == 'transition':
+    with mutation_gate(preempt=True):
+      state = owner()
+      if state is not None:
+        target = state.get('provider')
+        checked_action(target, 'disable')
+        teardown(target)
+    print(json.dumps({'ok': True}))
+    return
   with (CONTROL / 'lock').open('a') as lock:
     deadline = time.monotonic() + 10
     while True:
@@ -34,17 +81,31 @@ def main():
         if time.monotonic() >= deadline:
           raise TimeoutError('Network operation busy')
         time.sleep(.05)
-    if action in ('prepare', 'startcore', 'enable'):
+    result = {'ok': True}
+    if action == 'status':
+      state = owner()
+      if state is not None:
+        require_owner(state, provider)
+        pids = runtime.core_pids()
+        result['pid'] = pids[0] if len(pids) == 1 else None
+      else:
+        result['pid'] = None
+    elif action in ('prepare', 'startcore', 'enable'):
       authorized(provider)
-      parked()  # Recheck after acquiring the lock, not only at request time.
+      parked()
       if not valid_lease(provider):
         raise PermissionError('VPN service lease is unavailable')
-    handlers = {'prepare': routes.prepare, 'enable': routes.enable, 'disable': routes.disable,
-                'startcore': runtime.startcore, 'stopcore': runtime.stopcore}
-    if action == 'disable':
-      runtime.stopcore(provider)
-    handlers[action](provider)
-  print(json.dumps({'ok': True}))
+      if action == 'startcore':
+        start_guarded(provider)
+      else:
+        routes_guarded(provider, routes.prepare if action == 'prepare' else routes.enable)
+    else:
+      with mutation_gate():
+        if action == 'disable':
+          teardown(provider)
+        else:
+          runtime.stopcore(provider)
+  print(json.dumps(result))
 
 
 if __name__ == '__main__':
