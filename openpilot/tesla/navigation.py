@@ -52,8 +52,10 @@ class NavigationIngress:
     self.peer = None
     try:
       body, address = self.sock.recvfrom(MAX_BYTES + 1)
-    except socket.timeout:
+    except TimeoutError:
+      self._check()
       return None
+    self._check()
     now = time.monotonic()
     if int(now) != self.window:
       self.window, self.total, self.counts = int(now), 0, {}
