@@ -31,7 +31,7 @@ jobs:
       working-directory: msgq_repo
       run: scons -j4 msgq/ipc_pyx.so
     - name: Frequency tracking regression
-      run: python3 -m unittest openpilot.cereal.messaging.tests.test_frequency_tracker
+      run: PYTHONPATH="$PWD/opendbc_repo:$PYTHONPATH" python3 -m unittest openpilot.cereal.messaging.tests.test_frequency_tracker
     - uses: actions/checkout@v4
       with:
         repository: onemiless/xpilot-plugins
