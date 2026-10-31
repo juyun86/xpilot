@@ -4,7 +4,7 @@ import pyray as rl
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import FontWeight
 from openpilot.tesla.plugins import FAULTS_PARAM, LOAD_ERRORS, resolve
-from openpilot.tesla.ui.offroad import offroad_alerts
+from openpilot.tesla.ui.offroad import offroad_alerts, plugin_conflict_count
 from openpilot.tesla.ui.pages.developer import DeveloperPage
 from openpilot.tesla.ui.pages.device import DevicePage
 from openpilot.tesla.ui.pages.home import HomePage
@@ -61,7 +61,7 @@ class PluginsTile(_Settings):
 
   def state(self, sm):
     active, conflicts = resolve(ui_state.params)
-    return len(active), len(conflicts), len(LOAD_ERRORS) + len(ui_state.params.get(FAULTS_PARAM) or {})
+    return len(active), plugin_conflict_count(conflicts), len(LOAD_ERRORS) + len(ui_state.params.get(FAULTS_PARAM) or {})
 
   def lines(self, state):
     active, conflicts, failed = state
