@@ -107,6 +107,9 @@ def plugin_status(plugin, faults, conflicts) -> str:
   if plugin.NAME in faults:
     return tr("fault")
   if plugin.NAME in conflicts:
+    claims = getattr(plugin, "CLAIMS", ())
+    if getattr(plugin, "ENABLE_PARAM", "") is None and claims and all(c.startswith("role:") for c in claims):
+      return tr("inactive")
     return tr("conflict")
   if (mf.INSTALL_DIR / plugin.NAME).is_dir():
     return store.plugin_state(plugin.NAME, plugin.MANIFEST.version)
